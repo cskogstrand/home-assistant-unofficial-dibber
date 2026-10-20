@@ -219,11 +219,11 @@ async def test_source_paths_queries_and_opaque_segments(client):
     """Only observed GET endpoints are used, with encoded path/query identifiers."""
     start, end = date(2030, 4, 1), date(2030, 4, 30)
     with patch.object(client, "async_get", return_value=[]) as get:
-        for source in ("activities", "rsvp", "focus"):
+        for source in ("activities", "rsvp", "focus", "closures"):
             await client.async_source(
                 source, "nursery/a?b", "department/x&y", start, end
             )
-    activity_call, rsvp_call, focus_call = get.call_args_list
+    activity_call, rsvp_call, focus_call, closure_call = get.call_args_list
     assert activity_call.args[0] == "/api/ecdc/nursery%2Fa%3Fb/planner/activities"
     assert activity_call.args[1] == {
         "from": "2030-04-01",
@@ -233,11 +233,15 @@ async def test_source_paths_queries_and_opaque_segments(client):
     assert rsvp_call.args[0].endswith("/activities/rsvp")
     assert "department" not in rsvp_call.args[1]
     assert focus_call.args[0].endswith("/pedagogy/department%2Fx%26y/schedule")
+    assert closure_call.args == (
+        "/api/ecdc/nursery%2Fa%3Fb/schedule/closure-days",
+        {"from": "2030-04-01", "to": "2030-04-30"},
+    )
     with patch.object(client, "async_get", return_value=[]) as get:
         await client.async_source("focus", "..", "..", start, end)
     assert "/%2E%2E/" in get.call_args.args[0]
     with pytest.raises(ValueError, match="Unsupported source"):
-        await client.async_source("closure", "n", "d", start, end)
+        await client.async_source("unknown", "n", "d", start, end)
 
 
 def test_http_date_retry_after():

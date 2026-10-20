@@ -3,7 +3,10 @@
 An **unofficial**, read-only integration for caregiver accounts, installable as a
 HACS custom repository. Each selected child gets an ordinary Home Assistant
 calendar combining department activities, personal invitations (pending and
-accepted), and daily pedagogical focus.
+accepted), and daily pedagogical focus, plus a separate **Closure days** calendar
+(**Stengedager** in Norwegian) for planning days, nursery closures, and public
+holidays. A separate **Invitations** calendar (**Invitasjoner** in Norwegian)
+shows just pending and accepted personal invitations from the RSVP endpoint.
 
 Dibber's observed mobile API is not a supported public API and can change without
 notice. Development targets **Home Assistant 2026.10.2 / Python 3.14.2+**. Synthetic
@@ -40,14 +43,26 @@ unavailable; newly discovered children must be selected in options.
 Use these calendars in HA's Calendar panel, calendar card, automations, or
 `calendar.get_events`. Family dashboards can consume standard `summary`,
 `description`, `location`, `start`, `end`, and `uid` fields. No custom frontend,
-ICS server, or dashboard credentials are needed. Replace this example entity:
+ICS server, or dashboard credentials are needed. Replace these example entities:
 
 ```yaml
 type: calendar
 entities:
   - calendar.dibber_example_child
+  - calendar.dibber_example_child_closure_days
 initial_view: dayGridMonth
 ```
+
+Restart Home Assistant after updating the integration to add the new calendars
+for your selected children. Closure calendars use each child's nursery memberships;
+no nursery ID or fixed date range needs to be configured. Closure titles become
+event summaries and the API's closure type becomes the description.
+
+Use `calendar.dibber_example_child_invitations` to view invitations separately.
+These events also appear in the main combined calendar, so displaying both may
+show the same invitation twice. Invitations include their title, description,
+location, and timezone-aware start/end times. The separate calendar reuses the
+existing RSVP requests and cache.
 
 Calendars advertise no create, edit, delete, or RSVP actions. Personal invitations
 route only to children explicitly listed in recipient IDs. Attendee names, photos,
@@ -59,16 +74,17 @@ interprets markup nor downloads images or follows links.
 The account polls a seven-day near-term window every 15 minutes. Historical and
 future ranges are fetched on demand. Source requests and caches are shared across
 children. There is one request per distinct source/nursery/department/date window;
-RSVP is shared per nursery, with no department query parameter. Up to 64 parsed
-source windows are cached for 15 minutes. Range reads are serialized; account HTTP
-concurrency is limited to three.
+RSVP and closures are shared per nursery, with no department query parameter.
+Up to 64 parsed source windows are cached for 15 minutes. Range reads are
+serialized; account HTTP concurrency is limited to three.
 
 Dates are padded by one day on either end in UTC because source timezones can
 differ from HA. Windows longer than 31 dates, including some padded full-month
 views, split into overlapping month-sized chunks. This may require two queries per
 source for a full month, preventing timezone-boundary omissions without assuming
-larger API spans. A week normally needs three source queries per department, with
-RSVP shared per nursery. Results are locally filtered, sorted, and deduplicated.
+larger API spans. A week normally needs two source queries per department plus
+two per nursery (RSVP and closures). Results are locally filtered, sorted, and
+deduplicated, including closure responses that exceed the requested date range.
 
 Every poll writes state, which also refreshes HA 2026.10.2 calendar subscriptions
 when the current event is unchanged. Successful empty responses clear their window.
@@ -122,11 +138,12 @@ protection, not permission to copy personal data into the repository.
 - Daily focus is all-day and labeled **Daily focus** or **Dagens fokus** for Norwegian
   Bokmål. `learningFriends` is omitted because its meaning is unverified.
 - Notes are omitted because only empty responses were observed.
-- **Closures are disabled.** Observed endpoint:
+- Closure calendars use the observed endpoint:
   `GET /api/ecdc/{ecdc_id}/schedule/closure-days?from=YYYY-MM-DD&to=YYYY-MM-DD`.
-  Fields: `id`, `title`, `type`, `from`, `to`, `holidayDays`. Responses can exceed
-  requested bounds. Verify whether `to` is inclusive before enabling; never derive
-  duration from `holidayDays`. Null `to` could mean one day, but is not enabled.
+  A null `to` is assumed to mean one day; a dated `to` is assumed **inclusive**
+  and converted to HA's exclusive next-day end. These assumptions need live
+  comparison with the app. `holidayDays` never determines the event duration.
+  A closure overlapping a child's membership appears as its full date range.
 - Minimal headers, an independent device UUID, multi-child operation, long-term
   renewal, and password-change/revocation behavior need live verification. Requests
   use normal TLS, a fixed Dibber origin, no redirects, and no copied device
@@ -137,13 +154,33 @@ resets, passkeys, and event editing are outside scope.
 
 ## Development and verification
 
+Run these commands from the repository root. Docker Compose runs a separate
+Home Assistant instance; Python 3.14.2+ in the 3.14 series runs local checks.
+
 ```sh
-python3.14 -m venv .venv
-.venv/bin/python -m pip install -r requirements_dev.txt
-.venv/bin/python -m pytest
-.venv/bin/ruff check .
-.venv/bin/ruff format . --check
+./scripts/setup
+./scripts/lint
+./scripts/test
+docker compose config --quiet
+./scripts/develop
 ```
+
+Open [Home Assistant on localhost:8125](http://localhost:8125) and complete HA
+onboarding. Adding Dibber and signing in is the separate live-verification step
+described below. The container uses HA 2026.10.2, stores its configuration in this
+project's ignored `config/` files, and mounts the integration read-only. Port 8125
+allows the Onics project's instance on port 8124 to run alongside it.
+
+After editing Python code or translations, run
+`docker compose restart homeassistant`. Close any old setup dialog before starting
+**Add integration** again. Stop with Ctrl-C; `docker compose down` removes the
+container and preserves the configuration. Use a development configuration, never
+a production HA folder. Run Docker commands on the host with Docker Compose
+available; the VS Code devcontainer provides Python tooling only.
+
+`scripts/lint` checks without editing files. To format, run
+`.venv/bin/ruff format .`. `scripts/test` forwards pytest arguments, for example
+`./scripts/test tests/test_auth.py`.
 
 Tests use synthetic payloads and blocked network access. They exercise HA's real
 config-flow manager, config-entry persistence, setup/unload/reload, entity registry,
@@ -169,5 +206,5 @@ Only with account-owner approval, outside this repository:
    Basic month-range support was already verified by the user.
 4. Allow one renewal and restart HA. Verify persisted tokens work without printing
    them. Do not revoke/reset credentials or call logout.
-5. Compare one single-day and one multi-day closure before proposing a separate
-   change to enable closure events.
+5. Compare one single-day and one multi-day closure with the app to verify the
+   documented null and inclusive end-date assumptions.

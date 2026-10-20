@@ -104,6 +104,28 @@ def _activity(item: Any, nursery: str, *, rsvp: bool) -> Occurrence:
     )
 
 
+def _closure(item: Any, nursery: str) -> Occurrence:
+    """Convert closure dates to an all-day event, ignoring holiday day counts."""
+    closure_id = required_string(item, "id")
+    day = date.fromisoformat(required_string(item, "from"))
+    last = (
+        day if item["to"] is None else date.fromisoformat(required_string(item, "to"))
+    )
+    if last < day:
+        raise SchemaError("invalid_closure")
+    # shortcut: assume inclusive to; verify against the app's date range.
+    return Occurrence(
+        CalendarEvent(
+            start=day,
+            end=last + timedelta(days=1),
+            summary=required_string(item, "title"),
+            description=required_string(item, "type"),
+            uid=identity("closure", nursery, closure_id),
+        ),
+        day,
+    )
+
+
 def parse_source(
     data: Any, source: str, nursery: str, department: str, focus_title: str
 ) -> list[Occurrence]:
@@ -116,6 +138,9 @@ def parse_source(
         try:
             if not isinstance(group, dict):
                 raise SchemaError("invalid_calendar")
+            if source == "closures":
+                result.append(_closure(group, nursery))
+                continue
             if source == "focus":
                 text = _text(group.get("focusForTheDay"))
                 if text and text.strip():
@@ -145,7 +170,7 @@ def parse_source(
                         result.append(_activity(item, nursery, rsvp=source == "rsvp"))
                     except SchemaError, ValueError, TypeError, ZoneInfoNotFoundError:
                         skipped += 1
-        except SchemaError, ValueError, TypeError:
+        except SchemaError, ValueError, TypeError, KeyError, OverflowError:
             skipped += 1
     if skipped:
         LOGGER.warning(

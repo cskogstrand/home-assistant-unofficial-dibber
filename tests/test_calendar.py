@@ -23,6 +23,8 @@ END = START + timedelta(days=7)
 def source_payload(source, *, personal_child="child-a"):
     """Return one occurrence in both ordinary and RSVP feeds plus daily focus."""
     item = activity()
+    if source == "closures":
+        return []
     if source == "activities":
         return [{"date": "2030-04-14", "activities": [item]}]
     if source == "focus":
@@ -75,16 +77,18 @@ async def test_shared_requests_merge_rsvp_location_and_daily_focus(hass, entry, 
     a, b = await asyncio.gather(
         coordinator.async_events(START, END), coordinator.async_events(START, END)
     )
-    assert client.async_source.call_count == 3
+    assert client.async_source.call_count == 4
     assert client.async_children.call_count == 1
     assert a == b
-    assert len(a["child-a"]) == 2
-    assert a["child-a"][0].summary == "Daily focus"
-    assert a["child-a"][1].location == "Example room"
-    assert a["child-b"][1].location is None
-    assert a["child-a"][1].start.date() == date(2030, 4, 15)
+    assert len(a["child-a", "activities"]) == 2
+    assert a["child-a", "activities"][0].summary == "Daily focus"
+    assert a["child-a", "activities"][1].location == "Example room"
+    assert a["child-b", "activities"][1].location is None
+    assert a["child-a", "activities"][1].start.date() == date(2030, 4, 15)
+    assert a["child-a", "rsvp"] == [a["child-a", "activities"][1]]
+    assert a["child-b", "rsvp"] == []
     assert "PRIVATE_" not in repr(coordinator._cache)
-    assert all(event.uid for event in a["child-a"])
+    assert all(event.uid for event in a["child-a", "activities"])
 
 
 def test_personal_events_only_for_explicit_recipients_and_unknown_visibility(caplog):
@@ -232,8 +236,8 @@ async def test_membership_routes_each_date_and_rediscovery(hass, entry, client):
     child["departments"].append(second)
     client.async_children.return_value = parse_children([child])
     result = await coordinator.async_events(START, END)
-    assert len(result["child-a"]) == 2
-    assert result["child-b"] == []
+    assert len(result["child-a", "activities"]) == 2
+    assert result["child-b", "activities"] == []
     assert DibberCalendar(coordinator, "child-a").unique_id == original_id
     assert (
         len([c for c in client.async_source.call_args_list if c.args[0] == "rsvp"]) == 1
@@ -251,7 +255,7 @@ async def test_successful_empty_refetch_clears_and_failure_retains_cache(
 ):
     """Keep stale data internal; a successful empty response clears it."""
     coordinator = make_coordinator(hass, entry, client)
-    assert (await coordinator.async_events(START, END))["child-a"]
+    assert (await coordinator.async_events(START, END))["child-a", "activities"]
     old = dict(coordinator._cache)
     with patch(
         "custom_components.dibber.coordinator.time.monotonic", return_value=10**12
@@ -262,8 +266,12 @@ async def test_successful_empty_refetch_clears_and_failure_retains_cache(
         assert dict(coordinator._cache) == old
         client.async_source.side_effect = lambda *_: []
         assert await coordinator.async_events(START, END) == {
-            "child-a": [],
-            "child-b": [],
+            ("child-a", "activities"): [],
+            ("child-b", "activities"): [],
+            ("child-a", "closures"): [],
+            ("child-b", "closures"): [],
+            ("child-a", "rsvp"): [],
+            ("child-b", "rsvp"): [],
         }
 
 
@@ -271,10 +279,12 @@ async def test_range_chunking_bounds_cache_and_deduplicates(hass, entry, client)
     """Long ranges are complete and have bounded memory, not one request per day."""
     coordinator = make_coordinator(hass, entry, client)
     result = await coordinator.async_events(START, START + timedelta(days=90))
-    assert len(result["child-a"]) == 2
+    assert len(result["child-a", "activities"]) == 2
+    assert len(result["child-a", "rsvp"]) == 1
+    assert result["child-b", "rsvp"] == []
     assert (
-        client.async_source.call_count == 12
-    )  # Four padded date chunks, three sources.
+        client.async_source.call_count == 16
+    )  # Four padded date chunks, four sources.
     assert all(
         (call.args[-1] - call.args[-2]).days <= 30
         for call in client.async_source.call_args_list
@@ -307,7 +317,66 @@ async def test_current_next_state_and_no_network_in_properties(
     assert entity.available
     freezer.move_to("2030-04-17 00:00:00+00:00")
     assert entity.event is None
-    assert client.async_source.call_count == 3
+    assert client.async_source.call_count == 4
+
+
+@pytest.mark.parametrize(
+    "localization", [("en", "Invitations"), ("nb", "Invitasjoner")]
+)
+async def test_invitation_entity_preserves_details_and_recipient_scope(
+    hass, entry, client, freezer, localization
+):
+    """Pending and accepted invitations share reads and expose only calendar data."""
+    language, label = localization
+    hass.config.language = language
+    coordinator = make_coordinator(hass, entry, client)
+    payload = source_payload("rsvp")
+    pending = payload[0]["pending"][0]
+    pending["appointment"] = {
+        "date": "2030-04-15",
+        "start": "18:00",
+        "stop": "19:30",
+        "zone": "Europe/Oslo",
+    }
+    accepted = {
+        **pending,
+        "id": "accepted-a",
+        "appointment": {**pending["appointment"], "date": "2030-04-16"},
+    }
+    payload[0]["accepted"] = [accepted, pending]
+    payload[0]["declined"] = [{**pending, "id": "declined-a"}]
+    client.async_source.side_effect = lambda source, *_: (
+        payload if source == "rsvp" else source_payload(source)
+    )
+    coordinator.data = await coordinator.async_events(START, END)
+    coordinator.last_update_success = True
+    entity = DibberCalendar(coordinator, "child-a", "rsvp")
+    assert entity.name == f"Dibber Example child-a {label}"
+    assert entity.unique_id == "account-a:child-a:rsvp"
+    assert entity.supported_features == 0
+    events = await entity.async_get_events(hass, START, END)
+    assert len(events) == 2
+    assert events[0].start == datetime(2030, 4, 15, 18, tzinfo=ZoneInfo("Europe/Oslo"))
+    assert events[0].end == datetime(
+        2030, 4, 15, 19, 30, tzinfo=ZoneInfo("Europe/Oslo")
+    )
+    assert events[0].summary == pending["subject"]
+    assert events[0].description == pending["description"]
+    assert events[0].location == "Example room"
+    assert events[1].uid == "activity:nursery-a:accepted-a:2030-04-16"
+    assert "PRIVATE_" not in repr(events)
+    sibling = DibberCalendar(coordinator, "child-b", "rsvp")
+    assert await sibling.async_get_events(hass, START, END) == []
+    assert sibling.event is None
+    freezer.move_to(events[0].start)
+    assert entity.event == events[0]
+    freezer.move_to(events[0].end)
+    assert entity.event == events[1]
+    freezer.move_to(events[1].end)
+    assert entity.event is None
+    assert client.async_source.call_count == 4
+    coordinator.children = {}
+    assert not entity.available
 
 
 async def test_short_month_uses_range_queries_and_boundary_events_survive(
@@ -339,8 +408,8 @@ async def test_short_month_uses_range_queries_and_boundary_events_survive(
         else []
     )
     result = await coordinator.async_events(start, end)
-    assert len(result["child-a"]) == 2
-    assert client.async_source.call_count == 3
+    assert len(result["child-a", "activities"]) == 2
+    assert client.async_source.call_count == 4
     assert all(
         call.args[-2:] == (date(2030, 1, 31), date(2030, 3, 2))
         for call in client.async_source.call_args_list

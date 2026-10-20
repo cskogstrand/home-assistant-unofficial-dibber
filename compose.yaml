@@ -1,0 +1,10 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.10.2
+    ports:
+      - "127.0.0.1:8125:8123"
+    volumes:
+      - ./config:/config
+      - ./custom_components/dibber:/config/custom_components/dibber:ro
+    environment:
+      TZ: Europe/Oslo

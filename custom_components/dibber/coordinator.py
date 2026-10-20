@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 type DibberConfigEntry = ConfigEntry[DibberCoordinator]
 type CacheKey = tuple[str, str, str, date, date]
+type CalendarKey = tuple[str, str]
 MAX_CACHE_WINDOWS = 64
 
 
@@ -44,7 +45,7 @@ def date_windows(start: date, end: date) -> Iterator[tuple[date, date]]:
         start = stop
 
 
-class DibberCoordinator(DataUpdateCoordinator[dict[str, list[CalendarEvent]]]):
+class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEvent]]]):
     """Keep event properties local; calendars share all requests and refreshes."""
 
     def __init__(
@@ -103,7 +104,7 @@ class DibberCoordinator(DataUpdateCoordinator[dict[str, list[CalendarEvent]]]):
 
     async def async_events(  # noqa: PLR0912 Source and membership routing
         self, start: datetime, end: datetime
-    ) -> dict[str, list[CalendarEvent]]:
+    ) -> dict[CalendarKey, list[CalendarEvent]]:
         """Fetch complete ranges, coalescing concurrent sibling calendar reads."""
         if self._closed:
             raise DibberError("integration_unloaded")
@@ -112,8 +113,10 @@ class DibberCoordinator(DataUpdateCoordinator[dict[str, list[CalendarEvent]]]):
         try:
             async with self._range_lock:
                 await self.async_discover()
-                result: dict[str, dict[str, CalendarEvent]] = {
-                    child: {} for child in self.selected
+                result: dict[CalendarKey, dict[str, CalendarEvent]] = {
+                    (child, calendar_type): {}
+                    for child in self.selected
+                    for calendar_type in ("activities", "closures", "rsvp")
                 }
                 # Planner dates have source timezones, which can differ from HA.
                 first = dt_util.as_utc(start).date() - timedelta(days=1)
@@ -130,11 +133,13 @@ class DibberCoordinator(DataUpdateCoordinator[dict[str, list[CalendarEvent]]]):
                                 or membership.start > window_end
                             ):
                                 continue
-                            for source in ("activities", "focus", "rsvp"):
+                            for source in ("activities", "focus", "rsvp", "closures"):
                                 key = (
                                     source,
                                     membership.nursery,
-                                    "" if source == "rsvp" else membership.department,
+                                    ""
+                                    if source in ("rsvp", "closures")
+                                    else membership.department,
                                     window_start,
                                     window_end,
                                 )
@@ -143,12 +148,30 @@ class DibberCoordinator(DataUpdateCoordinator[dict[str, list[CalendarEvent]]]):
                                 )
                     # Sequential source reads also bound concurrency and cache pressure.
                     for key, routes in scopes.items():
+                        calendar_types = {
+                            "closures": ("closures",),
+                            "rsvp": ("activities", "rsvp"),
+                        }.get(key[0], ("activities",))
                         for occurrence in await self._source(key):
                             if not overlaps(occurrence.event, start, end):
                                 continue
                             for child_id, membership_start, membership_end in routes:
                                 # shortcut: inclusive end; verify on transfer.
-                                if (
+                                if key[0] == "closures":
+                                    route_start = max(
+                                        start,
+                                        dt_util.start_of_local_day(membership_start),
+                                    )
+                                    route_end = min(
+                                        end,
+                                        dt_util.start_of_local_day(membership_end)
+                                        + timedelta(days=1),
+                                    )
+                                    if route_start >= route_end or not overlaps(
+                                        occurrence.event, route_start, route_end
+                                    ):
+                                        continue
+                                elif (
                                     not membership_start
                                     <= occurrence.day
                                     <= membership_end
@@ -160,9 +183,11 @@ class DibberCoordinator(DataUpdateCoordinator[dict[str, list[CalendarEvent]]]):
                                 ):
                                     continue
                                 event = occurrence.event
-                                previous = result[child_id].get(event.uid)
-                                if previous is None or event.location:
-                                    result[child_id][event.uid] = event
+                                for calendar_type in calendar_types:
+                                    calendar_key = (child_id, calendar_type)
+                                    previous = result[calendar_key].get(event.uid)
+                                    if previous is None or event.location:
+                                        result[calendar_key][event.uid] = event
                 return {
                     child: sorted(events.values(), key=event_start)
                     for child, events in result.items()
@@ -170,7 +195,7 @@ class DibberCoordinator(DataUpdateCoordinator[dict[str, list[CalendarEvent]]]):
         finally:
             self._inflight.discard(task)
 
-    async def _async_update_data(self) -> dict[str, list[CalendarEvent]]:
+    async def _async_update_data(self) -> dict[CalendarKey, list[CalendarEvent]]:
         """Refresh only a small current/near-term window."""
         now = dt_util.now()
         try:

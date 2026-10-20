@@ -1,4 +1,4 @@
-"""One ordinary, read-only HA calendar per selected child."""
+"""Read-only activity, closure, and invitation calendars for each selected child."""
 
 from typing import TYPE_CHECKING
 
@@ -29,7 +29,9 @@ async def async_setup_entry(
     """Retain selected identities even if a child temporarily loses access."""
     coordinator = entry.runtime_data
     async_add_entities(
-        DibberCalendar(coordinator, child) for child in coordinator.selected
+        DibberCalendar(coordinator, child, calendar_type)
+        for child in coordinator.selected
+        for calendar_type in ("activities", "closures", "rsvp")
     )
 
 
@@ -39,19 +41,42 @@ class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
     _attr_supported_features = 0
     _attr_icon = "mdi:calendar"
 
-    def __init__(self, coordinator: DibberCoordinator, child_id: str) -> None:
+    def __init__(
+        self,
+        coordinator: DibberCoordinator,
+        child_id: str,
+        calendar_type: str = "activities",
+    ) -> None:
         """Names may change; account and child IDs remain the identity."""
         super().__init__(coordinator)
         self.child_id = child_id
+        self._calendar_key = (child_id, calendar_type)
+        self._suffix = ""
         self._attr_unique_id = identity(
             coordinator.config_entry.data[CONF_ACCOUNT_ID], child_id
         )
+        if calendar_type == "closures":
+            self._attr_unique_id += ":closures"
+            self._attr_icon = "mdi:calendar-remove"
+            self._suffix = (
+                " Stengedager"
+                if coordinator.hass.config.language in ("nb", "no")
+                else " Closure days"
+            )
+        elif calendar_type == "rsvp":
+            self._attr_unique_id += ":rsvp"
+            self._attr_icon = "mdi:calendar-account"
+            self._suffix = (
+                " Invitasjoner"
+                if coordinator.hass.config.language in ("nb", "no")
+                else " Invitations"
+            )
 
     @property
     def name(self) -> str:
         """Use only a minimum display label."""
         child = self.coordinator.children.get(self.child_id)
-        return f"Dibber {child.name}" if child else "Dibber"
+        return (f"Dibber {child.name}" if child else "Dibber") + self._suffix
 
     @property
     def available(self) -> bool:
@@ -67,7 +92,7 @@ class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
         return next(
             (
                 event
-                for event in (self.coordinator.data or {}).get(self.child_id, [])
+                for event in (self.coordinator.data or {}).get(self._calendar_key, [])
                 if dt_util.as_utc(event.end_datetime_local) > now
             ),
             None,
@@ -89,4 +114,4 @@ class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
             if self.coordinator.last_update_success:
                 self.coordinator.async_set_update_error(HomeAssistantError(str(error)))
             raise HomeAssistantError(str(error)) from None
-        return events.get(self.child_id, [])
+        return events.get(self._calendar_key, [])

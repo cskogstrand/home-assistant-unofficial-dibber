@@ -6,7 +6,7 @@ from logging import getLogger
 DOMAIN = "dibber"
 LOGGER = getLogger(__package__)
 BASE_URL = "https://api.dibber.com"
-USER_AGENT = "HomeAssistant-Dibber/0.1.0"
+USER_AGENT = "HomeAssistant-Dibber/0.1.1"
 POLL_INTERVAL = timedelta(minutes=15)
 DISCOVERY_INTERVAL = timedelta(hours=24)
 CONF_CHILDREN = "children"

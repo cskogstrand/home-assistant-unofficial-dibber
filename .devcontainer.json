@@ -2,15 +2,6 @@
     "name": "cskogstrand/home-assistant-unofficial-dibber",
     "image": "mcr.microsoft.com/devcontainers/base:debian",
     "postCreateCommand": "scripts/setup",
-    "forwardPorts": [
-        8123
-    ],
-    "portsAttributes": {
-        "8123": {
-            "label": "Home Assistant",
-            "onAutoForward": "notify"
-        }
-    },
     "customizations": {
         "vscode": {
             "extensions": [
@@ -28,6 +19,7 @@
                 "editor.formatOnType": false,
                 "files.trimTrailingWhitespace": true,
                 "python.analysis.typeCheckingMode": "basic",
+                "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
                 "python.analysis.autoImportCompletions": true,
                 "[python]": {
                     "editor.defaultFormatter": "charliermarsh.ruff"

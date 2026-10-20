@@ -1,17 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
+set -euo pipefail
 cd "$(dirname "$0")/.."
-
-# Create config dir if not present
-if [[ ! -d "${PWD}/config" ]]; then
-    mkdir -p "${PWD}/config"
-    hass --config "${PWD}/config" --script ensure_config
-fi
-
-# Make the custom_components namespace importable without copying it into config.
-export PYTHONPATH="${PWD}${PYTHONPATH:+:${PYTHONPATH}}"
-
-# Start Home Assistant
-hass --config "${PWD}/config" --debug
+exec docker compose up

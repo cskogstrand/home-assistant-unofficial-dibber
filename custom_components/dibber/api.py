@@ -353,7 +353,7 @@ class DibberClient:
     async def async_source(
         self, source: str, nursery: str, department: str, start: date, end: date
     ) -> Any:
-        """Fetch only the three observed calendar sources."""
+        """Fetch only the observed calendar sources."""
         nursery_segment = quote(nursery, safe="").replace(".", "%2E")
         department_segment = quote(department, safe="").replace(".", "%2E")
         prefix = f"/api/ecdc/{nursery_segment}/planner"
@@ -365,6 +365,8 @@ class DibberClient:
             path = f"{prefix}/activities/rsvp"
         elif source == "focus":
             path = f"{prefix}/pedagogy/{department_segment}/schedule"
+        elif source == "closures":
+            path = f"/api/ecdc/{nursery_segment}/schedule/closure-days"
         else:
             raise ValueError("Unsupported source")
         return await self.async_get(path, params)

@@ -19,7 +19,7 @@ from custom_components.dibber.api import (
 from custom_components.dibber.calendar import DibberCalendar
 from custom_components.dibber.coordinator import DibberCoordinator
 
-from .conftest import activity, child_payload
+from .conftest import activity, child_payload, closure
 
 
 @pytest.fixture
@@ -46,11 +46,19 @@ async def test_setup_unload_and_no_logout(hass, entry, runtime_api):
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert len(entities) == 2
+    assert len(entities) == 6
+    assert {item.unique_id for item in entities} == {
+        "account-a:child-a",
+        "account-a:child-a:closures",
+        "account-a:child-a:rsvp",
+        "account-a:child-b",
+        "account-a:child-b:closures",
+        "account-a:child-b:rsvp",
+    }
     assert all(item.domain == "calendar" for item in entities)
     assert not entry.update_listeners
     coordinator = entry.runtime_data
-    assert len(coordinator._listeners) == 2
+    assert len(coordinator._listeners) == 6
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert coordinator._closed
     assert not coordinator._listeners
@@ -98,15 +106,17 @@ async def test_reload_transfer_keeps_entity_ids(hass, entry, runtime_api):
     assert after == before
 
 
+@pytest.mark.parametrize("calendar_type", ["activities", "closures", "rsvp"])
 async def test_subscriber_receives_changed_window_with_unchanged_current_event(
-    hass, entry, runtime_api
+    hass, entry, runtime_api, calendar_type
 ):
     """HA 2026.10 writes notify subscribers even if event/state remains None."""
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    entity_id = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)[
-        0
-    ].entity_id
+    unique_id = "account-a:child-a"
+    if calendar_type != "activities":
+        unique_id += f":{calendar_type}"
+    entity_id = er.async_get(hass).async_get_entity_id("calendar", "dibber", unique_id)
     entity = hass.data["calendar"].get_entity(entity_id)
     now = dt_util.now()
     future = now + timedelta(days=40)
@@ -118,16 +128,29 @@ async def test_subscriber_receives_changed_window_with_unchanged_current_event(
     await hass.async_block_till_done()
     assert results[-1] == []
     assert entity.event is None
-    runtime_api[1].side_effect = lambda source, *_: (
-        [
+    day = (future + timedelta(days=1)).date().isoformat()
+    payload = (
+        [closure(**{"from": day})]
+        if calendar_type == "closures"
+        else [{"activities": [activity(day=day)]}]
+    )
+    if calendar_type == "rsvp":
+        payload = [
             {
-                "activities": [
-                    activity(day=(future + timedelta(days=1)).date().isoformat())
-                ]
+                "pending": [
+                    activity(
+                        day=day,
+                        visibility="Personal",
+                        rsvpResponse={
+                            "caregivers": [{"children": [{"id": "child-a"}]}]
+                        },
+                    )
+                ],
+                "accepted": [],
             }
         ]
-        if source == "activities"
-        else []
+    runtime_api[1].side_effect = lambda source, *_: (
+        payload if source == calendar_type else []
     )
     entry.runtime_data._cache.clear()
     entity.async_write_ha_state()
@@ -160,14 +183,21 @@ async def test_unload_cancels_inflight_reads(hass, entry, client):
     assert not coordinator._inflight
 
 
+@pytest.mark.parametrize("calendar_type", ["activities", "closures", "rsvp"])
 async def test_on_demand_failure_unavailable_then_poll_recovers(
-    hass, entry, runtime_api
+    hass, entry, runtime_api, calendar_type
 ):
     """Failed range reads raise an HA error and never return stale events."""
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    entity = DibberCalendar(entry.runtime_data, "child-a")
-    runtime_api[1].side_effect = CommunicationError("cannot_connect")
+    entity = DibberCalendar(entry.runtime_data, "child-a", calendar_type)
+
+    def fail_source(source, *_):
+        if source == calendar_type:
+            raise CommunicationError("cannot_connect")
+        return []
+
+    runtime_api[1].side_effect = fail_source
     start = dt_util.now() + timedelta(days=60)
     with pytest.raises(HomeAssistantError, match="cannot_connect"):
         await entity.async_get_events(hass, start, start + timedelta(days=7))
@@ -215,3 +245,7 @@ async def test_options_reload_removes_unselected_active_calendar(
     component = hass.data["calendar"]
     assert component.get_entity(before["account-a:child-a"]) is None
     assert component.get_entity(before["account-a:child-b"]) is not None
+    assert component.get_entity(before["account-a:child-a:closures"]) is None
+    assert component.get_entity(before["account-a:child-b:closures"]) is not None
+    assert component.get_entity(before["account-a:child-a:rsvp"]) is None
+    assert component.get_entity(before["account-a:child-b:rsvp"]) is not None

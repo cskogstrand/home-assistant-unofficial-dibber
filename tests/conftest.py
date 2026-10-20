@@ -82,6 +82,19 @@ def activity(day="2030-04-15", activity_id="activity-a", **overrides):
     }
 
 
+def closure(**overrides):
+    """Generate fictional single-day or multi-day nursery closures."""
+    return {
+        "id": "closure-a",
+        "type": "PLANNING_DAY",
+        "title": "Example planning day",
+        "from": "2030-04-15",
+        "to": None,
+        "holidayDays": 0,
+        **overrides,
+    }
+
+
 @pytest.fixture(autouse=True)
 def custom_integrations(enable_custom_integrations):
     """Permit loading the repository's custom integration."""
