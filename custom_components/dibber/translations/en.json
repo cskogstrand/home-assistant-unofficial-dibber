@@ -1,0 +1,72 @@
+{
+  "title": "Dibber",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sign in to Dibber",
+        "description": "Submitting sends a login request and may initiate an email verification step. Enter your own caregiver credentials. Your password and code are never saved.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "code": {
+        "title": "Verify sign-in",
+        "description": "Enter your Dibber email access code. Its validity is controlled by Dibber; it is not stored.",
+        "data": {
+          "code": "Access code"
+        }
+      },
+      "children": {
+        "title": "Choose calendars",
+        "description": "Select children to create read-only calendars. If discovery failed, submit again to retry.",
+        "data": {
+          "children": "Children"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Sign-in was rejected. Check your credentials or code.",
+      "unsupported_auth": "This integration supports provisioned caregiver DibberMFA accounts only.",
+      "access_denied": "Dibber denied access to this resource. Check caregiver access in the app.",
+      "rate_limited": "Dibber requested a pause. Wait before trying again.",
+      "cannot_connect": "Unable to contact Dibber. Try again later.",
+      "renewal_uncertain": "A token renewal response was lost. Use Reconfigure to sign in again; automatic renewal is paused to avoid replaying a rotated token.",
+      "invalid_response": "Dibber returned an unsupported response. Please report the error without personal data.",
+      "request_rejected": "Dibber rejected the request.",
+      "password_expired": "Dibber reports an expired password. Update it in Dibber, then sign in again.",
+      "select_children": "Select at least one accessible child."
+    },
+    "abort": {
+      "already_configured": "This Dibber account is already configured.",
+      "wrong_account": "Sign in with the same Dibber account as this integration.",
+      "no_children": "No accessible children were found. Check your caregiver account in Dibber."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Choose calendars",
+        "description": "Choose the children whose calendars you want to display.",
+        "data": {
+          "children": "Children"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Sign-in was rejected. Check your credentials or code.",
+      "unsupported_auth": "This integration supports provisioned caregiver DibberMFA accounts only.",
+      "access_denied": "Dibber denied access to this resource. Check caregiver access in the app.",
+      "rate_limited": "Dibber requested a pause. Wait before trying again.",
+      "cannot_connect": "Unable to contact Dibber. Try again later.",
+      "renewal_uncertain": "A token renewal response was lost. Use Reconfigure to sign in again; automatic renewal is paused to avoid replaying a rotated token.",
+      "invalid_response": "Dibber returned an unsupported response. Please report the error without personal data.",
+      "request_rejected": "Dibber rejected the request.",
+      "password_expired": "Dibber reports an expired password. Update it in Dibber, then sign in again.",
+      "select_children": "Select at least one accessible child."
+    },
+    "abort": {
+      "no_children": "No accessible children were found. Check your caregiver account in Dibber."
+    }
+  }
+}

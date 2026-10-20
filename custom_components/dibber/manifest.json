@@ -1,0 +1,14 @@
+{
+  "domain": "dibber",
+  "name": "Dibber",
+  "codeowners": [
+    "@cskogstrand"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/cskogstrand/home-assistant-unofficial-dibber",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/cskogstrand/home-assistant-unofficial-dibber/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

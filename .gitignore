@@ -16,3 +16,34 @@ coverage.xml
 # Home Assistant configuration
 config/*
 !config/configuration.yaml
+.storage/
+home-assistant.log*
+home-assistant_v2.db*
+backups/
+
+# Local environments, credentials and captures
+.venv/
+.idea/
+.DS_Store
+.env
+.env.*
+secrets.yaml
+secrets.yml
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ecdsa
+id_ed25519
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.har
+*.proxymanlogv2
+*.pcap
+*.pcapng
+captures/
+credentials*.json
+tokens*.json

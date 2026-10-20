@@ -13,7 +13,15 @@ ignore = [
     "D212", # multi-line-summary-first-line (incompatible with formatter)
     "COM812", # incompatible with formatter
     "ISC001", # incompatible with formatter
+    "CPY001", # Repository-level MIT license; no per-file boilerplate
+    "EM101",  # Exceptions contain short, sanitized category keys
+    "TRY003", # Keep sanitized error categories at their boundary checks
+    "TRY301", # Keep validation and parsing together
+    "FBT",    # Internal token-persistence callback carries an uncertainty flag
 ]
+
+[lint.per-file-ignores]
+"tests/*" = ["ANN", "ARG", "S101", "SLF001", "PLR2004"]
 
 [lint.flake8-pytest-style]
 fixture-parentheses = false

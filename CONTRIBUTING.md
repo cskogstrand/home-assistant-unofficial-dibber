@@ -1,61 +1,23 @@
-# Contribution guidelines
+# Contributing
 
-Contributing to this project should be as easy and transparent as possible, whether it's:
+Use Python 3.14.2+ and the commands in [README.md](README.md). Keep changes small,
+use synthetic fixtures, and run pytest, Ruff lint, and Ruff format before a PR.
 
-- Reporting a bug
-- Discussing the current state of the code
-- Submitting a fix
-- Proposing new features
+Do not share captures, tokens, credentials, names, child identifiers, event text,
+or unreviewed logs. Describe API changes with fictional examples. Require evidence
+for new endpoints and assumptions, especially writes, personal invitation audiences,
+closure ends, and unknown note payloads.
 
-## Github is used for everything
+Before every commit, stage the intended changes and scan them with
+[Gitleaks](https://github.com/gitleaks/gitleaks):
 
-Github is used to host code, to track issues and feature requests, as well as accept pull requests.
+```sh
+gitleaks git --staged --redact --no-banner
+```
 
-Pull requests are the best way to propose changes to the codebase.
+Review `git diff --cached` as well: scanners cannot recognize every credential or
+personal detail. Ignore rules do not protect files already tracked by Git.
 
-1. Fork the repo and create your branch from `main`.
-2. If you've changed something, update the documentation.
-3. Make sure your code lints (using `scripts/lint`).
-4. Test you contribution.
-5. Issue that pull request!
-
-## Any contributions you make will be under the MIT Software License
-
-In short, when you submit code changes, your submissions are understood to be under the same [MIT License](http://choosealicense.com/licenses/mit/) that covers the project. Feel free to contact the maintainers if that's a concern.
-
-## Report bugs using Github's [issues](../../issues)
-
-GitHub issues are used to track public bugs.
-Report a bug by [opening a new issue](../../issues/new/choose); it's that easy!
-
-## Write bug reports with detail, background, and sample code
-
-**Great Bug Reports** tend to have:
-
-- A quick summary and/or background
-- Steps to reproduce
-  - Be specific!
-  - Give sample code if you can.
-- What you expected would happen
-- What actually happens
-- Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
-
-People *love* thorough bug reports. I'm not even kidding.
-
-## Use a Consistent Coding Style
-
-Use [black](https://github.com/ambv/black) to make sure the code follows the style.
-
-## Test your code modification
-
-This custom component is based on [integration_blueprint template](https://github.com/ludeeus/integration_blueprint).
-
-It comes with development environment in a container, easy to launch
-if you use Visual Studio Code. With this container you will have a stand alone
-Home Assistant instance running and already configured with the included
-[`configuration.yaml`](./config/configuration.yaml)
-file.
-
-## License
-
-By contributing, you agree that your contributions will be licensed under its MIT License.
+Report bugs through this repository's GitHub issue templates, including HA and
+integration versions, a sanitized error category, and reproduction steps.
+Contributions use the repository's MIT license.

@@ -1,0 +1,72 @@
+{
+  "title": "Dibber",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Logg inn i Dibber",
+        "description": "Når du sender inn skjemaet, starter en innlogging som kan sende en bekreftelse på e-post. Bruk din egen foresattkonto. Passord og kode lagres aldri.",
+        "data": {
+          "email": "E-post",
+          "password": "Passord"
+        }
+      },
+      "code": {
+        "title": "Bekreft innlogging",
+        "description": "Skriv inn tilgangskoden fra Dibber. Dibber bestemmer hvor lenge den er gyldig. Koden lagres ikke.",
+        "data": {
+          "code": "Tilgangskode"
+        }
+      },
+      "children": {
+        "title": "Velg kalendere",
+        "description": "Velg barna du vil ha skrivebeskyttede kalendere for. Send inn på nytt for å prøve igjen hvis henting mislyktes.",
+        "data": {
+          "children": "Barn"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Innloggingen ble avvist. Kontroller innloggingsopplysningene eller koden.",
+      "unsupported_auth": "Integrasjonen støtter bare foresattkontoer med aktivert DibberMFA.",
+      "access_denied": "Dibber avviste tilgangen. Kontroller tilgangen som foresatt i appen.",
+      "rate_limited": "Dibber ba om en pause. Vent før du prøver igjen.",
+      "cannot_connect": "Kunne ikke kontakte Dibber. Prøv igjen senere.",
+      "renewal_uncertain": "Svaret på tokenfornyelsen gikk tapt. Bruk Konfigurer på nytt for å logge inn igjen. Automatisk fornyelse er satt på pause.",
+      "invalid_response": "Dibber returnerte et svar som ikke støttes. Rapporter feilen uten personopplysninger.",
+      "request_rejected": "Dibber avviste forespørselen.",
+      "password_expired": "Passordet er utløpt. Oppdater det i Dibber og logg inn igjen.",
+      "select_children": "Velg minst ett tilgjengelig barn."
+    },
+    "abort": {
+      "already_configured": "Denne Dibber-kontoen er allerede konfigurert.",
+      "wrong_account": "Logg inn med samme Dibber-konto som denne integrasjonen.",
+      "no_children": "Fant ingen tilgjengelige barn. Kontroller foresattkontoen i Dibber."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Velg kalendere",
+        "description": "Velg barna du vil vise kalendere for.",
+        "data": {
+          "children": "Barn"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Innloggingen ble avvist. Kontroller innloggingsopplysningene eller koden.",
+      "unsupported_auth": "Integrasjonen støtter bare foresattkontoer med aktivert DibberMFA.",
+      "access_denied": "Dibber avviste tilgangen. Kontroller tilgangen som foresatt i appen.",
+      "rate_limited": "Dibber ba om en pause. Vent før du prøver igjen.",
+      "cannot_connect": "Kunne ikke kontakte Dibber. Prøv igjen senere.",
+      "renewal_uncertain": "Svaret på tokenfornyelsen gikk tapt. Bruk Konfigurer på nytt for å logge inn igjen. Automatisk fornyelse er satt på pause.",
+      "invalid_response": "Dibber returnerte et svar som ikke støttes. Rapporter feilen uten personopplysninger.",
+      "request_rejected": "Dibber avviste forespørselen.",
+      "password_expired": "Passordet er utløpt. Oppdater det i Dibber og logg inn igjen.",
+      "select_children": "Velg minst ett tilgjengelig barn."
+    },
+    "abort": {
+      "no_children": "Fant ingen tilgjengelige barn. Kontroller foresattkontoen i Dibber."
+    }
+  }
+}
