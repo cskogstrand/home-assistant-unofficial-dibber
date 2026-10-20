@@ -19,7 +19,7 @@ from custom_components.dibber.api import (
 from custom_components.dibber.calendar import DibberCalendar
 from custom_components.dibber.coordinator import DibberCoordinator
 
-from .conftest import activity, child_payload, closure
+from .conftest import activity, child_payload, closure, opening_hours
 
 
 @pytest.fixture
@@ -36,8 +36,12 @@ def runtime_api():
             "custom_components.dibber.api.DibberClient.async_source",
             new=AsyncMock(return_value=[]),
         ) as source,
+        patch(
+            "custom_components.dibber.api.DibberClient.async_opening_hours",
+            new=AsyncMock(return_value=[]),
+        ) as hours,
     ):
-        yield children, source
+        yield children, source, hours
 
 
 async def test_setup_unload_and_no_logout(hass, entry, runtime_api):
@@ -46,23 +50,25 @@ async def test_setup_unload_and_no_logout(hass, entry, runtime_api):
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert len(entities) == 10
+    assert len(entities) == 12
     assert {item.unique_id for item in entities} == {
         "account-a:child-a",
         "account-a:child-a:closures",
         "account-a:child-a:rsvp",
         "account-a:child-a:focus",
         "account-a:child-a:meetings",
+        "account-a:child-a:opening_hours",
         "account-a:child-b",
         "account-a:child-b:closures",
         "account-a:child-b:rsvp",
         "account-a:child-b:focus",
         "account-a:child-b:meetings",
+        "account-a:child-b:opening_hours",
     }
     assert all(item.domain == "calendar" for item in entities)
     assert not entry.update_listeners
     coordinator = entry.runtime_data
-    assert len(coordinator._listeners) == 10
+    assert len(coordinator._listeners) == 12
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert coordinator._closed
     assert not coordinator._listeners
@@ -92,6 +98,8 @@ async def test_setup_unload_and_no_logout(hass, entry, runtime_api):
 async def test_calendar_names_and_ids(hass, entry, runtime_api, localization):
     """Use the complete first name and distinguish children with identical names."""
     language, labels, suffixes = localization
+    labels += ("Opening hours" if language == "en" else "Åpningstider",)
+    suffixes += ("opening_hours" if language == "en" else "apningstider",)
     hass.config.language = language
     runtime_api[0].return_value = parse_children(
         [
@@ -225,7 +233,8 @@ async def test_reload_transfer_keeps_entity_ids(hass, entry, runtime_api):
 
 
 @pytest.mark.parametrize(
-    "calendar_type", ["activities", "closures", "rsvp", "focus", "meetings"]
+    "calendar_type",
+    ["activities", "closures", "rsvp", "focus", "meetings", "opening_hours"],
 )
 async def test_subscriber_receives_changed_window_with_unchanged_current_event(
     hass, entry, runtime_api, calendar_type
@@ -278,6 +287,11 @@ async def test_subscriber_receives_changed_window_with_unchanged_current_event(
     runtime_api[1].side_effect = lambda source, *_: (
         payload if source == source_type else []
     )
+    if calendar_type == "opening_hours":
+        runtime_api[2].return_value = opening_hours(
+            days=((future + timedelta(days=1)).strftime("%A").upper(),)
+        )
+        entry.runtime_data._opening_hours.clear()
     entry.runtime_data._cache.clear()
     entity.async_write_ha_state()
     await hass.async_block_till_done()
@@ -310,7 +324,8 @@ async def test_unload_cancels_inflight_reads(hass, entry, client):
 
 
 @pytest.mark.parametrize(
-    "calendar_type", ["activities", "closures", "rsvp", "focus", "meetings"]
+    "calendar_type",
+    ["activities", "closures", "rsvp", "focus", "meetings", "opening_hours"],
 )
 async def test_on_demand_failure_unavailable_then_poll_recovers(
     hass, entry, runtime_api, calendar_type
@@ -326,11 +341,15 @@ async def test_on_demand_failure_unavailable_then_poll_recovers(
         return []
 
     runtime_api[1].side_effect = fail_source
+    if calendar_type == "opening_hours":
+        entry.runtime_data._opening_hours.clear()
+        runtime_api[2].side_effect = CommunicationError("cannot_connect")
     start = dt_util.now() + timedelta(days=60)
     with pytest.raises(HomeAssistantError, match="cannot_connect"):
         await entity.async_get_events(hass, start, start + timedelta(days=7))
     assert not entity.available
     runtime_api[1].side_effect = None
+    runtime_api[2].side_effect = None
     await entry.runtime_data.async_refresh()
     assert entity.available
 
@@ -381,3 +400,5 @@ async def test_options_reload_removes_unselected_active_calendar(
     assert component.get_entity(before["account-a:child-b:focus"]) is not None
     assert component.get_entity(before["account-a:child-a:meetings"]) is None
     assert component.get_entity(before["account-a:child-b:meetings"]) is not None
+    assert component.get_entity(before["account-a:child-a:opening_hours"]) is None
+    assert component.get_entity(before["account-a:child-b:opening_hours"]) is not None

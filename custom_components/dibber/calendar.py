@@ -64,6 +64,7 @@ class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
             "rsvp": ("Invitations", "Invitasjoner", "mdi:calendar-account"),
             "focus": ("Pedagogy", "Pedagogikk", "mdi:school"),
             "meetings": ("Meetings", "Møter", "mdi:account-group"),
+            "opening_hours": ("Opening hours", "Åpningstider", "mdi:clock-outline"),
         }[calendar_type]
         label = (
             norwegian if coordinator.hass.config.language in ("nb", "no") else english

@@ -316,6 +316,33 @@ Response item fields: `id`, `title`, `type`, `from`, `to`, and `holidayDays`. `f
 
 The app requested a calendar-year window, but responses included records outside that window. Filter locally. Neither `holidayDays` nor the request bounds prove whether `to` is inclusive. Before enabling this source, compare one single-day closure and one multi-day closure with the app. A null `to` can be modeled as one day as an explicitly documented assumption. Do not silently convert every range to `to + 1 day` without verification.
 
+### Opening hours — subsequently supplied schema
+
+`GET /api/ecdc/{ecdc_id}/schedule/opening-hours`
+
+The user subsequently supplied a weekly response with uppercase `dayOfWeek`
+names and nested `openingHours.opens` / `openingHours.closes` clock strings.
+Representative fictional entry:
+
+```json
+[
+  {
+    "dayOfWeek": "MONDAY",
+    "openingHours": {"opens": "08:00", "closes": "16:30"}
+  }
+]
+```
+
+There are no date or department parameters in the observed request. Create a
+separate Opening hours calendar per selected child, sharing the weekly schedule
+per nursery and expanding it into dated events within the child's memberships.
+Refresh the weekly schedule daily. Omitted weekdays produce no events.
+
+The response has no timezone or validity dates. Using HA's configured timezone
+and applying the current weekly schedule to past/future dates are explicit
+implementation assumptions. Show regular hours independently of closure days;
+holiday exceptions and historical schedule changes are not established.
+
 ### Notes and other endpoints
 
 `GET /api/ecdc/{ecdc_id}/planner/notes/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD&department={department_id}` returned only `[]`. Its non-empty schema remains unknown; leave this source out of v1.
@@ -325,7 +352,6 @@ The remaining observed routes do not need implementation for this calendar:
 | Method and path | Reason to omit |
 |---|---|
 | `GET /api/state` with or without `childId` and `ecdcId` | Returns domain/state strings; no demonstrated need for calendar reads |
-| `GET /api/ecdc/{ecdc_id}/schedule/opening-hours` | Weekly opening hours, not individual plans |
 | `GET /api/banners/user?kindergartenId={ecdc_id}` | App UI content |
 | `GET /api/daily-summary/feedback/emoji/list` | Feedback UI |
 | `GET /api/ecdc/{ecdc_id}/department/{department_id}/daily-summary/detail?date=YYYY-MM-DD` | Daily report, outside calendar scope |

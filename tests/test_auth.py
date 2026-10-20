@@ -238,6 +238,9 @@ async def test_source_paths_queries_and_opaque_segments(client):
         {"from": "2030-04-01", "to": "2030-04-30"},
     )
     with patch.object(client, "async_get", return_value=[]) as get:
+        await client.async_opening_hours("nursery/a?b")
+    get.assert_awaited_once_with("/api/ecdc/nursery%2Fa%3Fb/schedule/opening-hours")
+    with patch.object(client, "async_get", return_value=[]) as get:
         await client.async_source("focus", "..", "..", start, end)
     assert "/%2E%2E/" in get.call_args.args[0]
     with pytest.raises(ValueError, match="Unsupported source"):

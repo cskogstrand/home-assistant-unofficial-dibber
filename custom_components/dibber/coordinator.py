@@ -29,7 +29,15 @@ from .const import (
     LOGGER,
     POLL_INTERVAL,
 )
-from .events import Occurrence, event_start, overlaps, parse_source
+from .events import (
+    Occurrence,
+    WeeklyHours,
+    event_start,
+    opening_events,
+    overlaps,
+    parse_opening_hours,
+    parse_source,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -69,6 +77,7 @@ class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEve
         )
         self.client = client
         self.children: dict[str, Child] = {}
+        self._opening_hours: OrderedDict[str, tuple[float, WeeklyHours]] = OrderedDict()
         self.selected = tuple(
             entry.options.get(CONF_CHILDREN, entry.data[CONF_CHILDREN])
         )
@@ -81,6 +90,9 @@ class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEve
         self._closed = False
         self._focus_title = (
             "Dagens fokus" if hass.config.language in ("nb", "no") else "Daily focus"
+        )
+        self._opening_title = (
+            "Åpningstider" if hass.config.language in ("nb", "no") else "Opening hours"
         )
 
     async def async_discover(self, *, force: bool = False) -> None:
@@ -96,11 +108,25 @@ class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEve
 
     async def _source(self, key: CacheKey) -> list[Occurrence]:
         """Cache sanitized events; failures leave the previous entry untouched."""
+        source, nursery, department, start, end = key
+        if source == "opening_hours":
+            weekly = self._opening_hours.get(nursery)
+            if (
+                weekly is None
+                or time.monotonic() - weekly[0] >= DISCOVERY_INTERVAL.total_seconds()
+            ):
+                schedule = parse_opening_hours(
+                    await self.client.async_opening_hours(nursery)
+                )
+                weekly = self._opening_hours[nursery] = (time.monotonic(), schedule)
+            self._opening_hours.move_to_end(nursery)
+            while len(self._opening_hours) > MAX_CACHE_WINDOWS:
+                self._opening_hours.popitem(last=False)
+            return opening_events(weekly[1], nursery, start, end, self._opening_title)
         cached = self._cache.get(key)
         if cached and time.monotonic() - cached[0] < POLL_INTERVAL.total_seconds():
             self._cache.move_to_end(key)
             return cached[1]
-        source, nursery, department, start, end = key
         data = await self.client.async_source(source, nursery, department, start, end)
         events = parse_source(data, source, nursery, department, self._focus_title)
         self._cache[key] = (time.monotonic(), events)
@@ -140,12 +166,18 @@ class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEve
                                 or membership.start > window_end
                             ):
                                 continue
-                            for source in ("activities", "focus", "rsvp", "closures"):
+                            for source in (
+                                "activities",
+                                "focus",
+                                "rsvp",
+                                "closures",
+                                "opening_hours",
+                            ):
                                 key = (
                                     source,
                                     membership.nursery,
                                     ""
-                                    if source in ("rsvp", "closures")
+                                    if source in ("rsvp", "closures", "opening_hours")
                                     else membership.department,
                                     window_start,
                                     window_end,
@@ -161,6 +193,7 @@ class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEve
                             calendar_types = {
                                 "closures": ("closures",),
                                 "focus": ("focus",),
+                                "opening_hours": ("opening_hours",),
                             }.get(
                                 key[0],
                                 ("meetings",)

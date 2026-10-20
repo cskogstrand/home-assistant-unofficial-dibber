@@ -95,6 +95,18 @@ def closure(**overrides):
     }
 
 
+def opening_hours(
+    days=("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"),
+    opens="08:00",
+    closes="16:30",
+):
+    """Generate fictional weekly hours using the supplied API schema."""
+    return [
+        {"dayOfWeek": day, "openingHours": {"opens": opens, "closes": closes}}
+        for day in days
+    ]
+
+
 @pytest.fixture(autouse=True)
 def custom_integrations(enable_custom_integrations):
     """Permit loading the repository's custom integration."""

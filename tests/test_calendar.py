@@ -68,6 +68,7 @@ def make_coordinator(hass, entry, client):
     client.async_source = AsyncMock(
         side_effect=lambda source, *_: source_payload(source)
     )
+    client.async_opening_hours = AsyncMock(return_value=[])
     return DibberCoordinator(hass, entry, client)
 
 
@@ -79,6 +80,7 @@ async def test_shared_requests_merge_rsvp_location_and_daily_focus(hass, entry, 
     )
     assert client.async_source.call_count == 4
     assert client.async_children.call_count == 1
+    client.async_opening_hours.assert_awaited_once_with("nursery-a")
     assert a == b
     assert len(a["child-a", "activities"]) == 1
     assert a["child-a", "focus"][0].summary == "Daily focus"
@@ -278,6 +280,8 @@ async def test_successful_empty_refetch_clears_and_failure_retains_cache(
             ("child-b", "focus"): [],
             ("child-a", "meetings"): [],
             ("child-b", "meetings"): [],
+            ("child-a", "opening_hours"): [],
+            ("child-b", "opening_hours"): [],
         }
 
 

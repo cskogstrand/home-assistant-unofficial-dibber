@@ -351,6 +351,11 @@ class DibberClient:
         """Discard all unrelated child data immediately."""
         return parse_children(await self.async_get("/api/caregivers/children"))
 
+    async def async_opening_hours(self, nursery: str) -> Any:
+        """Fetch the weekly schedule without undocumented date/department queries."""
+        segment = quote(nursery, safe="").replace(".", "%2E")
+        return await self.async_get(f"/api/ecdc/{segment}/schedule/opening-hours")
+
     async def async_source(
         self, source: str, nursery: str, department: str, start: date, end: date
     ) -> Any:

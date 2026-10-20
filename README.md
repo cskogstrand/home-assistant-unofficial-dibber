@@ -10,6 +10,7 @@ HACS custom repository. Each selected child gets ordinary Home Assistant calenda
 | Pedagogy | Pedagogikk | Daily pedagogical focus as all-day events |
 | Closure days | Stengedager | Planning days, nursery closures, and public holidays |
 | Invitations | Invitasjoner | Pending and accepted personal invitations from the RSVP endpoint |
+| Opening hours | Åpningstider | Regular weekly nursery opening intervals |
 
 Dibber's observed mobile API is not a supported public API and can change without
 notice. Development targets **Home Assistant 2026.10.2 / Python 3.14.2+**. Synthetic
@@ -55,6 +56,7 @@ entities:
   - calendar.dibber_example_meetings
   - calendar.dibber_example_pedagogy
   - calendar.dibber_example_closure_days
+  - calendar.dibber_example_opening_hours
 initial_view: dayGridMonth
 ```
 
@@ -83,6 +85,14 @@ may show duplicates. Pending and accepted invitations are both included; their
 response status is not displayed. Invitations retain their title, description,
 location, and timezone-aware start/end times.
 
+Use `calendar.dibber_example_opening_hours` for the regular weekly schedule.
+Each supplied weekday becomes a timed event, from `opens` to `closes`, on the
+requested dates. Missing weekdays produce no events. The API supplies no timezone,
+so **Home Assistant's configured timezone must match the nursery's timezone**.
+The current schedule is repeated into past and future calendar views; the endpoint
+does not supply historical schedules or effective dates. Closure days are shown
+on their own calendar and do not remove regular opening-hours events.
+
 Calendars advertise no create, edit, delete, or RSVP actions. Personal invitations
 route only to children explicitly listed in recipient IDs. Attendee names, photos,
 and counts are discarded. Descriptions remain text: the integration neither
@@ -96,6 +106,9 @@ children. There is one request per distinct source/nursery/department/date windo
 RSVP and closures are shared per nursery, with no department query parameter.
 Up to 64 parsed source windows are cached for 15 minutes. Range reads are
 serialized; account HTTP concurrency is limited to three.
+Opening hours use one additional GET per nursery, shared across children and date
+windows and cached for 24 hours. Up to 64 validated weekly schedules are retained.
+Recurring events are generated locally as needed, without one request per day.
 
 Dates are padded by one day on either end in UTC because source timezones can
 differ from HA. Windows longer than 31 dates, including some padded full-month
@@ -157,6 +170,12 @@ protection, not permission to copy personal data into the repository.
 - Daily focus is all-day and labeled **Daily focus** or **Dagens fokus** for Norwegian
   Bokmål. `learningFriends` is omitted because its meaning is unverified.
 - Notes are omitted because only empty responses were observed.
+- Opening hours use the supplied `dayOfWeek` / `openingHours.opens` /
+  `openingHours.closes` schema. Same-day `HH:MM` intervals are supported.
+  Missing/null intervals, unknown weekday names, overnight/equal clock ranges,
+  and nonexistent/ambiguous DST times are skipped with sanitized warnings.
+  Conflicting intervals for one weekday are rejected. Nursery timezone and
+  holiday exceptions are not supplied by this endpoint.
 - Closure calendars use the observed endpoint:
   `GET /api/ecdc/{ecdc_id}/schedule/closure-days?from=YYYY-MM-DD&to=YYYY-MM-DD`.
   A null `to` is assumed to mean one day; a dated `to` is assumed **inclusive**
@@ -227,3 +246,4 @@ Only with account-owner approval, outside this repository:
    them. Do not revoke/reset credentials or call logout.
 5. Compare one single-day and one multi-day closure with the app to verify the
    documented null and inclusive end-date assumptions.
+6. Compare opening hours with the app and confirm HA's timezone matches the nursery.

@@ -14,6 +14,17 @@ from homeassistant.util import dt as dt_util
 from .api import SchemaError, required_string
 from .const import LOGGER
 
+type WeeklyHours = dict[int, tuple[str, str]]
+WEEKDAYS = (
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "SUNDAY",
+)
+
 
 @dataclass(frozen=True)
 class Occurrence:
@@ -37,18 +48,81 @@ def _text(value: Any) -> str | None:
     raise SchemaError("invalid_text")
 
 
-def _local_time(day: date, value: Any, zone: ZoneInfo) -> datetime:
-    """Reject nonexistent or ambiguous clock times rather than inventing a fold."""
+def _clock(value: Any) -> time:
+    """Validate the observed HH:MM clock format."""
     if not isinstance(value, str) or len(value) != len("HH:MM"):
         raise SchemaError("invalid_time")
-    clock = time.fromisoformat(value)
-    naive = datetime.combine(day, clock)
+    return time.fromisoformat(value)
+
+
+def _local_time(day: date, value: Any, zone: ZoneInfo) -> datetime:
+    """Reject nonexistent or ambiguous clock times rather than inventing a fold."""
+    naive = datetime.combine(day, _clock(value))
     result = naive.replace(tzinfo=zone)
     if (
         result.astimezone(UTC).astimezone(zone).replace(tzinfo=None) != naive
         or result.utcoffset() != result.replace(fold=1).utcoffset()
     ):
         raise SchemaError("ambiguous_time")
+    return result
+
+
+def parse_opening_hours(data: Any) -> WeeklyHours:
+    """Keep validated weekday intervals; omit unknown or malformed entries."""
+    if not isinstance(data, list):
+        raise SchemaError("invalid_opening_hours")
+    schedule = {}
+    skipped = 0
+    for item in data:
+        try:
+            weekday = WEEKDAYS.index(required_string(item, "dayOfWeek"))
+            hours = item.get("openingHours")
+            opens = required_string(hours, "opens")
+            closes = required_string(hours, "closes")
+            if _clock(closes) <= _clock(opens):
+                raise SchemaError("unsupported_duration")
+        except SchemaError, ValueError, TypeError:
+            skipped += 1
+            continue
+        if weekday in schedule and schedule[weekday] != (opens, closes):
+            raise SchemaError("conflicting_opening_hours")
+        schedule[weekday] = (opens, closes)
+    if skipped:
+        LOGGER.warning("Dibber opening hours: skipped %d malformed entries", skipped)
+    return schedule
+
+
+def opening_events(
+    schedule: WeeklyHours, nursery: str, first: date, last: date, title: str
+) -> list[Occurrence]:
+    """Expand the current weekly schedule into dated, timezone-aware events."""
+    result = []
+    skipped = 0
+    for offset in range((last - first).days + 1):
+        day = first + timedelta(days=offset)
+        hours = schedule.get(day.weekday())
+        if hours is None:
+            continue
+        try:
+            # shortcut: no API zone; use HA's zone until nursery timezone is known.
+            start = _local_time(day, hours[0], dt_util.DEFAULT_TIME_ZONE)
+            end = _local_time(day, hours[1], dt_util.DEFAULT_TIME_ZONE)
+        except SchemaError, ValueError:
+            skipped += 1
+            continue
+        result.append(
+            Occurrence(
+                CalendarEvent(
+                    start=start,
+                    end=end,
+                    summary=title,
+                    uid=identity("opening", nursery, day.isoformat()),
+                ),
+                day,
+            )
+        )
+    if skipped:
+        LOGGER.warning("Dibber opening hours: skipped %d invalid local dates", skipped)
     return result
 
 
