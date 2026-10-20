@@ -42,6 +42,22 @@ sign-in, options, and approximately daily. Department transfers preserve calenda
 entity IDs because registry identities use account and child IDs. Inaccessible
 children become unavailable; newly discovered children must be selected in options.
 
+## Branding
+
+The integration bundles Dibber's official icon and wordmark from
+[dibber.app](https://www.dibber.app/) in `custom_components/dibber/brand/`.
+Home Assistant loads these automatically after installation and restart using its
+[local brand image support](https://contributors.home-assistant.io/core/integrations/brands/).
+If an old placeholder remains, refresh the browser or companion app.
+
+Sources: [icon](https://static.wixstatic.com/media/fc9d19_6f99730adbc14c46b6cd682d986a99ec~mv2.png)
+and [wordmark](https://static.wixstatic.com/media/fc9d19_2c67357a7d7b4471a016afc6fd09885e~mv2.png),
+retrieved on 2026-10-20. The website's image CDN trims transparent margins and
+provides standard and `@2x` PNG sizes. The artwork retains its original colors;
+high-resolution versions are upscaled from the available source images.
+The Dibber artwork and trademarks belong to their respective owners and are not
+covered by this repository's MIT license. This integration remains unofficial.
+
 ## Calendar use
 
 Use these calendars in HA's Calendar panel, calendar card, automations, or
@@ -224,8 +240,8 @@ Tests use synthetic payloads and blocked network access. They exercise HA's real
 config-flow manager, config-entry persistence, setup/unload/reload, entity registry,
 and calendar subscriptions, plus mocked HTTP, parser, and range-cache behavior.
 They do not establish live Dibber compatibility. CI includes pytest, Ruff,
-hassfest, and HACS repository validation. Brand submission and default-store
-inclusion remain separate publishing tasks.
+hassfest, and HACS repository validation. Brand images ship with the integration;
+HACS default-store inclusion remains a separate publishing task.
 
 See [DIBBER_HACS_PROMPT.md](DIBBER_HACS_PROMPT.md) for the evidence and scope,
 [HA's calendar contract](https://contributors.home-assistant.io/core/entities/calendar/),
