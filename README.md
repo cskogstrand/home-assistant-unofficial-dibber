@@ -35,8 +35,8 @@ own device UUID and never borrows a phone's token pair.
 
 Use **Configure** options to change child selection. Discovery runs during setup,
 sign-in, options, and approximately daily. Department transfers preserve calendar
-entity IDs because IDs use account and child identity. Inaccessible children become
-unavailable; newly discovered children must be selected in options.
+entity IDs because registry identities use account and child IDs. Inaccessible
+children become unavailable; newly discovered children must be selected in options.
 
 ## Calendar use
 
@@ -48,8 +48,8 @@ ICS server, or dashboard credentials are needed. Replace these example entities:
 ```yaml
 type: calendar
 entities:
-  - calendar.dibber_example_child
-  - calendar.dibber_example_child_closure_days
+  - calendar.dibber_example_activities
+  - calendar.dibber_example_closure_days
 initial_view: dayGridMonth
 ```
 
@@ -58,7 +58,14 @@ for your selected children. Closure calendars use each child's nursery membershi
 no nursery ID or fixed date range needs to be configured. Closure titles become
 event summaries and the API's closure type becomes the description.
 
-Use `calendar.dibber_example_child_invitations` to view invitations separately.
+Calendar names and default entity IDs use the child's first name, such as
+**Dibber Example Activities** (`calendar.dibber_example_activities`), with
+**Aktiviteter** in Norwegian. Existing default IDs are renamed on restart;
+manually chosen names and IDs are preserved. Update dashboards and automations
+that reference the old IDs. Children with the same first name receive numbered
+IDs from Home Assistant.
+
+Use `calendar.dibber_example_invitations` to view invitations separately.
 These events also appear in the main combined calendar, so displaying both may
 show the same invitation twice. Invitations include their title, description,
 location, and timezone-aware start/end times. The separate calendar reuses the

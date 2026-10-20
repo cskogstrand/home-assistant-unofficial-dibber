@@ -66,6 +66,120 @@ async def test_setup_unload_and_no_logout(hass, entry, runtime_api):
 
 
 @pytest.mark.parametrize(
+    "localization",
+    [
+        (
+            "en",
+            ("Activities", "Closure days", "Invitations"),
+            ("activities", "closure_days", "invitations"),
+        ),
+        (
+            "nb",
+            ("Aktiviteter", "Stengedager", "Invitasjoner"),
+            ("aktiviteter", "stengedager", "invitasjoner"),
+        ),
+        (
+            "no",
+            ("Aktiviteter", "Stengedager", "Invitasjoner"),
+            ("aktiviteter", "stengedager", "invitasjoner"),
+        ),
+    ],
+)
+async def test_calendar_names_and_ids(hass, entry, runtime_api, localization):
+    """Use the complete first name and distinguish children with identical names."""
+    language, labels, suffixes = localization
+    hass.config.language = language
+    runtime_api[0].return_value = parse_children(
+        [
+            child_payload(child_id) | {"firstName": "Anne Marie"}
+            for child_id in ("child-a", "child-b")
+        ]
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    assert {item.entity_id for item in entities} == {
+        f"calendar.dibber_anne_marie_{suffix}{number}"
+        for suffix in suffixes
+        for number in ("", "_2")
+    }
+    assert {item.original_name for item in entities} == {
+        f"Dibber Anne Marie {label}" for label in labels
+    }
+
+
+@pytest.mark.parametrize("custom_id", [False, True])
+@pytest.mark.parametrize(
+    "localization",
+    [
+        (
+            "en",
+            ("", " Closure days", " Invitations"),
+            ("activities", "closure_days", "invitations"),
+        ),
+        (
+            "nb",
+            ("", " Stengedager", " Invitasjoner"),
+            ("aktiviteter", "stengedager", "invitasjoner"),
+        ),
+    ],
+)
+async def test_legacy_calendar_ids_migrate_once(
+    hass, entry, runtime_api, custom_id, localization
+):
+    """Keep registry identity and overrides while migrating old generated IDs."""
+    language, old_suffixes, new_suffixes = localization
+    hass.config.language = language
+    registry = er.async_get(hass)
+    previous = []
+    for unique_suffix, old_suffix in zip(
+        ("", ":closures", ":rsvp"), old_suffixes, strict=True
+    ):
+        old_name = f"Dibber Example child-a{old_suffix}"
+        registered = registry.async_get_or_create(
+            "calendar",
+            "dibber",
+            f"account-a:child-a{unique_suffix}",
+            config_entry=entry,
+            original_name=old_name,
+            object_id_base=old_name,
+        )
+        registered = registry.async_update_entity(
+            registered.entity_id,
+            new_entity_id=(
+                f"calendar.family{unique_suffix.replace(':', '_')}"
+                if custom_id
+                else f"{registered.entity_id}_2"
+            ),
+            name="My calendar" if unique_suffix == ":closures" else None,
+        )
+        previous.append(registered)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    for old, suffix in zip(previous, new_suffixes, strict=True):
+        entity_id = registry.async_get_entity_id("calendar", "dibber", old.unique_id)
+        assert entity_id == (
+            old.entity_id if custom_id else f"calendar.dibber_example_{suffix}"
+        )
+        registered = registry.async_get(entity_id)
+        assert registered.id == old.id
+        assert registered.name == old.name
+        assert hass.states.get(entity_id) is not None
+        if not custom_id:
+            assert hass.states.get(old.entity_id) is None
+    before = {
+        item.unique_id: item.entity_id
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert {
+        item.unique_id: item.entity_id
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+    } == before
+
+
+@pytest.mark.parametrize(
     ("failure", "state"),
     [
         (CommunicationError("cannot_connect"), ConfigEntryState.SETUP_RETRY),

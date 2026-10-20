@@ -1,14 +1,17 @@
 """Read-only activity, closure, and invitation calendars for each selected child."""
 
+import re
 from typing import TYPE_CHECKING
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
+from homeassistant.util import slugify
 
 from .api import AccessDeniedError, AuthenticationError, DibberError
-from .const import CONF_ACCOUNT_ID
+from .const import CONF_ACCOUNT_ID, DOMAIN
 from .coordinator import DibberConfigEntry, DibberCoordinator
 from .events import identity
 
@@ -22,17 +25,21 @@ PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001 HA platform signature
+    hass: HomeAssistant,
     entry: DibberConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Retain selected identities even if a child temporarily loses access."""
     coordinator = entry.runtime_data
-    async_add_entities(
+    entities = [
         DibberCalendar(coordinator, child, calendar_type)
         for child in coordinator.selected
         for calendar_type in ("activities", "closures", "rsvp")
-    )
+    ]
+    registry = er.async_get(hass)
+    for entity in entities:
+        entity.async_migrate_entity_id(registry)
+    async_add_entities(entities)
 
 
 class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
@@ -51,7 +58,11 @@ class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
         super().__init__(coordinator)
         self.child_id = child_id
         self._calendar_key = (child_id, calendar_type)
-        self._suffix = ""
+        self._suffix = (
+            " Aktiviteter"
+            if coordinator.hass.config.language in ("nb", "no")
+            else " Activities"
+        )
         self._attr_unique_id = identity(
             coordinator.config_entry.data[CONF_ACCOUNT_ID], child_id
         )
@@ -76,7 +87,31 @@ class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
     def name(self) -> str:
         """Use only a minimum display label."""
         child = self.coordinator.children.get(self.child_id)
-        return (f"Dibber {child.name}" if child else "Dibber") + self._suffix
+        return (f"Dibber {child.first_name}" if child else "Dibber") + self._suffix
+
+    def async_migrate_entity_id(self, registry: er.EntityRegistry) -> None:
+        """Rename legacy default IDs once, preserving user overrides and identity."""
+        child = self.coordinator.children.get(self.child_id)
+        entity_id = registry.async_get_entity_id("calendar", DOMAIN, self.unique_id)
+        if child is None or entity_id is None:
+            return
+        old_name = f"Dibber {child.name}"
+        if self._calendar_key[1] != "activities":
+            old_name += self._suffix
+        registered = registry.async_get(entity_id)
+        if registered.original_name != old_name or old_name == self.name:
+            return
+        if not re.fullmatch(
+            rf"calendar\.{re.escape(slugify(old_name))}(?:_\d+)?", entity_id
+        ):
+            return
+        registry.async_update_entity(
+            entity_id,
+            new_entity_id=registry.async_get_available_entity_id(
+                "calendar", self.name, current_entity_id=entity_id
+            ),
+            original_name=self.name,
+        )
 
     @property
     def available(self) -> bool:

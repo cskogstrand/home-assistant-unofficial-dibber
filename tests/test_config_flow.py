@@ -230,6 +230,8 @@ def test_invalid_discovery_not_empty(payload):
 def test_discovery_mapping_and_privacy():
     """Only names, routing IDs and membership dates survive parsing."""
     children = parse_children([child_payload()])
+    assert children["child-a"].name == "Example child-a"
+    assert children["child-a"].first_name == "Example"
     membership = children["child-a"].memberships[0]
     assert membership.nursery == "nursery-a"
     assert membership.department == "department-a"

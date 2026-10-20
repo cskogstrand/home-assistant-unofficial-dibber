@@ -351,7 +351,7 @@ async def test_invitation_entity_preserves_details_and_recipient_scope(
     coordinator.data = await coordinator.async_events(START, END)
     coordinator.last_update_success = True
     entity = DibberCalendar(coordinator, "child-a", "rsvp")
-    assert entity.name == f"Dibber Example child-a {label}"
+    assert entity.name == f"Dibber Example {label}"
     assert entity.unique_id == "account-a:child-a:rsvp"
     assert entity.supported_features == 0
     events = await entity.async_get_events(hass, START, END)

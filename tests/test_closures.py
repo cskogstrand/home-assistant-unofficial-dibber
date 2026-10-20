@@ -178,7 +178,7 @@ async def test_closure_entity_state_range_reads_and_empty_refresh(
     )
     await coordinator.async_refresh()
     entity = DibberCalendar(coordinator, "child-a", "closures")
-    assert entity.name == f"Dibber Example child-a {label}"
+    assert entity.name == f"Dibber Example {label}"
     assert entity.unique_id == "account-a:child-a:closures"
     assert DibberCalendar(coordinator, "child-a").unique_id == "account-a:child-a"
     assert entity.supported_features == 0

@@ -123,6 +123,7 @@ class Child:
 
     id: str
     name: str
+    first_name: str
     memberships: tuple[Membership, ...] = field(default_factory=tuple)
 
 
@@ -155,7 +156,7 @@ def parse_children(data: Any) -> dict[str, Child]:
                     )
                 )
             children[child_id] = Child(
-                child_id, f"{name} {last}".strip(), tuple(memberships)
+                child_id, f"{name} {last}".strip(), name.strip(), tuple(memberships)
             )
     except ValueError:
         raise SchemaError("invalid_children") from None
