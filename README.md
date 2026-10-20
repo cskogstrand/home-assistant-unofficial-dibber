@@ -1,12 +1,15 @@
 # Dibber calendars for Home Assistant
 
 An **unofficial**, read-only integration for caregiver accounts, installable as a
-HACS custom repository. Each selected child gets an ordinary Home Assistant
-calendar combining department activities, personal invitations (pending and
-accepted), and daily pedagogical focus, plus a separate **Closure days** calendar
-(**Stengedager** in Norwegian) for planning days, nursery closures, and public
-holidays. A separate **Invitations** calendar (**Invitasjoner** in Norwegian)
-shows just pending and accepted personal invitations from the RSVP endpoint.
+HACS custom repository. Each selected child gets ordinary Home Assistant calendars:
+
+| Calendar | Norwegian name | Contents |
+|---|---|---|
+| Activities | Aktiviteter | Department activities and personal invitations whose `activityType` is not `Meeting` |
+| Meetings | Møter | `Meeting` events from department activities and personal invitations |
+| Pedagogy | Pedagogikk | Daily pedagogical focus as all-day events |
+| Closure days | Stengedager | Planning days, nursery closures, and public holidays |
+| Invitations | Invitasjoner | Pending and accepted personal invitations from the RSVP endpoint |
 
 Dibber's observed mobile API is not a supported public API and can change without
 notice. Development targets **Home Assistant 2026.10.2 / Python 3.14.2+**. Synthetic
@@ -49,6 +52,8 @@ ICS server, or dashboard credentials are needed. Replace these example entities:
 type: calendar
 entities:
   - calendar.dibber_example_activities
+  - calendar.dibber_example_meetings
+  - calendar.dibber_example_pedagogy
   - calendar.dibber_example_closure_days
 initial_view: dayGridMonth
 ```
@@ -65,11 +70,18 @@ manually chosen names and IDs are preserved. Update dashboards and automations
 that reference the old IDs. Children with the same first name receive numbered
 IDs from Home Assistant.
 
+Use `calendar.dibber_example_pedagogy` for daily focus and
+`calendar.dibber_example_meetings` for meetings. These events have moved out of
+Activities; add the new calendars to dashboards and automations that previously
+used Activities for everything. Existing entity and event IDs are preserved.
+The new calendars reuse the existing source requests and cache.
+
 Use `calendar.dibber_example_invitations` to view invitations separately.
-These events also appear in the main combined calendar, so displaying both may
-show the same invitation twice. Invitations include their title, description,
-location, and timezone-aware start/end times. The separate calendar reuses the
-existing RSVP requests and cache.
+Invitations also appear in Meetings when their `activityType` is exactly `Meeting`,
+or in Activities otherwise, so displaying Invitations alongside those calendars
+may show duplicates. Pending and accepted invitations are both included; their
+response status is not displayed. Invitations retain their title, description,
+location, and timezone-aware start/end times.
 
 Calendars advertise no create, edit, delete, or RSVP actions. Personal invitations
 route only to children explicitly listed in recipient IDs. Attendee names, photos,

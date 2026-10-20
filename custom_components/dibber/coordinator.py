@@ -21,7 +21,14 @@ from .api import (
     DibberError,
     RateLimitError,
 )
-from .const import CONF_CHILDREN, DISCOVERY_INTERVAL, DOMAIN, LOGGER, POLL_INTERVAL
+from .const import (
+    CALENDAR_TYPES,
+    CONF_CHILDREN,
+    DISCOVERY_INTERVAL,
+    DOMAIN,
+    LOGGER,
+    POLL_INTERVAL,
+)
 from .events import Occurrence, event_start, overlaps, parse_source
 
 if TYPE_CHECKING:
@@ -116,7 +123,7 @@ class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEve
                 result: dict[CalendarKey, dict[str, CalendarEvent]] = {
                     (child, calendar_type): {}
                     for child in self.selected
-                    for calendar_type in ("activities", "closures", "rsvp")
+                    for calendar_type in CALENDAR_TYPES
                 }
                 # Planner dates have source timezones, which can differ from HA.
                 first = dt_util.as_utc(start).date() - timedelta(days=1)
@@ -148,13 +155,20 @@ class DibberCoordinator(DataUpdateCoordinator[dict[CalendarKey, list[CalendarEve
                                 )
                     # Sequential source reads also bound concurrency and cache pressure.
                     for key, routes in scopes.items():
-                        calendar_types = {
-                            "closures": ("closures",),
-                            "rsvp": ("activities", "rsvp"),
-                        }.get(key[0], ("activities",))
                         for occurrence in await self._source(key):
                             if not overlaps(occurrence.event, start, end):
                                 continue
+                            calendar_types = {
+                                "closures": ("closures",),
+                                "focus": ("focus",),
+                            }.get(
+                                key[0],
+                                ("meetings",)
+                                if occurrence.is_meeting
+                                else ("activities",),
+                            )
+                            if key[0] == "rsvp":
+                                calendar_types += ("rsvp",)
                             for child_id, membership_start, membership_end in routes:
                                 # shortcut: inclusive end; verify on transfer.
                                 if key[0] == "closures":

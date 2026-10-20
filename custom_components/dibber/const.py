@@ -13,3 +13,4 @@ CONF_CHILDREN = "children"
 CONF_DEVICE_ID = "device_id"
 CONF_ACCOUNT_ID = "account_id"
 CONF_UNCERTAIN = "renewal_uncertain"
+CALENDAR_TYPES = ("activities", "closures", "rsvp", "focus", "meetings")

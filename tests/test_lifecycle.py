@@ -46,19 +46,23 @@ async def test_setup_unload_and_no_logout(hass, entry, runtime_api):
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert len(entities) == 6
+    assert len(entities) == 10
     assert {item.unique_id for item in entities} == {
         "account-a:child-a",
         "account-a:child-a:closures",
         "account-a:child-a:rsvp",
+        "account-a:child-a:focus",
+        "account-a:child-a:meetings",
         "account-a:child-b",
         "account-a:child-b:closures",
         "account-a:child-b:rsvp",
+        "account-a:child-b:focus",
+        "account-a:child-b:meetings",
     }
     assert all(item.domain == "calendar" for item in entities)
     assert not entry.update_listeners
     coordinator = entry.runtime_data
-    assert len(coordinator._listeners) == 6
+    assert len(coordinator._listeners) == 10
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert coordinator._closed
     assert not coordinator._listeners
@@ -70,18 +74,18 @@ async def test_setup_unload_and_no_logout(hass, entry, runtime_api):
     [
         (
             "en",
-            ("Activities", "Closure days", "Invitations"),
-            ("activities", "closure_days", "invitations"),
+            ("Activities", "Closure days", "Invitations", "Pedagogy", "Meetings"),
+            ("activities", "closure_days", "invitations", "pedagogy", "meetings"),
         ),
         (
             "nb",
-            ("Aktiviteter", "Stengedager", "Invitasjoner"),
-            ("aktiviteter", "stengedager", "invitasjoner"),
+            ("Aktiviteter", "Stengedager", "Invitasjoner", "Pedagogikk", "Møter"),
+            ("aktiviteter", "stengedager", "invitasjoner", "pedagogikk", "moter"),
         ),
         (
             "no",
-            ("Aktiviteter", "Stengedager", "Invitasjoner"),
-            ("aktiviteter", "stengedager", "invitasjoner"),
+            ("Aktiviteter", "Stengedager", "Invitasjoner", "Pedagogikk", "Møter"),
+            ("aktiviteter", "stengedager", "invitasjoner", "pedagogikk", "moter"),
         ),
     ],
 )
@@ -220,7 +224,9 @@ async def test_reload_transfer_keeps_entity_ids(hass, entry, runtime_api):
     assert after == before
 
 
-@pytest.mark.parametrize("calendar_type", ["activities", "closures", "rsvp"])
+@pytest.mark.parametrize(
+    "calendar_type", ["activities", "closures", "rsvp", "focus", "meetings"]
+)
 async def test_subscriber_receives_changed_window_with_unchanged_current_event(
     hass, entry, runtime_api, calendar_type
 ):
@@ -248,6 +254,12 @@ async def test_subscriber_receives_changed_window_with_unchanged_current_event(
         if calendar_type == "closures"
         else [{"activities": [activity(day=day)]}]
     )
+    source_type = calendar_type
+    if calendar_type == "focus":
+        payload = [{"date": day, "focusForTheDay": "Fictional focus."}]
+    elif calendar_type == "meetings":
+        payload = [{"activities": [activity(day=day, activityType="Meeting")]}]
+        source_type = "activities"
     if calendar_type == "rsvp":
         payload = [
             {
@@ -264,7 +276,7 @@ async def test_subscriber_receives_changed_window_with_unchanged_current_event(
             }
         ]
     runtime_api[1].side_effect = lambda source, *_: (
-        payload if source == calendar_type else []
+        payload if source == source_type else []
     )
     entry.runtime_data._cache.clear()
     entity.async_write_ha_state()
@@ -297,7 +309,9 @@ async def test_unload_cancels_inflight_reads(hass, entry, client):
     assert not coordinator._inflight
 
 
-@pytest.mark.parametrize("calendar_type", ["activities", "closures", "rsvp"])
+@pytest.mark.parametrize(
+    "calendar_type", ["activities", "closures", "rsvp", "focus", "meetings"]
+)
 async def test_on_demand_failure_unavailable_then_poll_recovers(
     hass, entry, runtime_api, calendar_type
 ):
@@ -307,7 +321,7 @@ async def test_on_demand_failure_unavailable_then_poll_recovers(
     entity = DibberCalendar(entry.runtime_data, "child-a", calendar_type)
 
     def fail_source(source, *_):
-        if source == calendar_type:
+        if source == ("activities" if calendar_type == "meetings" else calendar_type):
             raise CommunicationError("cannot_connect")
         return []
 
@@ -363,3 +377,7 @@ async def test_options_reload_removes_unselected_active_calendar(
     assert component.get_entity(before["account-a:child-b:closures"]) is not None
     assert component.get_entity(before["account-a:child-a:rsvp"]) is None
     assert component.get_entity(before["account-a:child-b:rsvp"]) is not None
+    assert component.get_entity(before["account-a:child-a:focus"]) is None
+    assert component.get_entity(before["account-a:child-b:focus"]) is not None
+    assert component.get_entity(before["account-a:child-a:meetings"]) is None
+    assert component.get_entity(before["account-a:child-b:meetings"]) is not None

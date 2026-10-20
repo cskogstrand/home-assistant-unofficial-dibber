@@ -110,7 +110,8 @@ async def test_shared_closures_separate_from_activities_and_filtered_locally(
         "closure:nursery-a:closure-a",
     ]
     assert result["child-b", "closures"] == events
-    assert len(result["child-a", "activities"]) == 2
+    assert len(result["child-a", "activities"]) == 1
+    assert len(result["child-a", "focus"]) == 1
     calls = [
         call
         for call in client.async_source.call_args_list

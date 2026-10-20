@@ -80,12 +80,13 @@ async def test_shared_requests_merge_rsvp_location_and_daily_focus(hass, entry, 
     assert client.async_source.call_count == 4
     assert client.async_children.call_count == 1
     assert a == b
-    assert len(a["child-a", "activities"]) == 2
-    assert a["child-a", "activities"][0].summary == "Daily focus"
-    assert a["child-a", "activities"][1].location == "Example room"
-    assert a["child-b", "activities"][1].location is None
-    assert a["child-a", "activities"][1].start.date() == date(2030, 4, 15)
-    assert a["child-a", "rsvp"] == [a["child-a", "activities"][1]]
+    assert len(a["child-a", "activities"]) == 1
+    assert a["child-a", "focus"][0].summary == "Daily focus"
+    assert a["child-a", "focus"] == a["child-b", "focus"]
+    assert a["child-a", "activities"][0].location == "Example room"
+    assert a["child-b", "activities"][0].location is None
+    assert a["child-a", "activities"][0].start.date() == date(2030, 4, 15)
+    assert a["child-a", "rsvp"] == a["child-a", "activities"]
     assert a["child-b", "rsvp"] == []
     assert "PRIVATE_" not in repr(coordinator._cache)
     assert all(event.uid for event in a["child-a", "activities"])
@@ -236,7 +237,8 @@ async def test_membership_routes_each_date_and_rediscovery(hass, entry, client):
     child["departments"].append(second)
     client.async_children.return_value = parse_children([child])
     result = await coordinator.async_events(START, END)
-    assert len(result["child-a", "activities"]) == 2
+    assert len(result["child-a", "activities"]) == 1
+    assert len(result["child-a", "focus"]) == 1
     assert result["child-b", "activities"] == []
     assert DibberCalendar(coordinator, "child-a").unique_id == original_id
     assert (
@@ -272,6 +274,10 @@ async def test_successful_empty_refetch_clears_and_failure_retains_cache(
             ("child-b", "closures"): [],
             ("child-a", "rsvp"): [],
             ("child-b", "rsvp"): [],
+            ("child-a", "focus"): [],
+            ("child-b", "focus"): [],
+            ("child-a", "meetings"): [],
+            ("child-b", "meetings"): [],
         }
 
 
@@ -279,7 +285,8 @@ async def test_range_chunking_bounds_cache_and_deduplicates(hass, entry, client)
     """Long ranges are complete and have bounded memory, not one request per day."""
     coordinator = make_coordinator(hass, entry, client)
     result = await coordinator.async_events(START, START + timedelta(days=90))
-    assert len(result["child-a", "activities"]) == 2
+    assert len(result["child-a", "activities"]) == 1
+    assert len(result["child-a", "focus"]) == 1
     assert len(result["child-a", "rsvp"]) == 1
     assert result["child-b", "rsvp"] == []
     assert (
@@ -312,11 +319,102 @@ async def test_current_next_state_and_no_network_in_properties(
     coordinator.last_update_success = True
     entity = DibberCalendar(coordinator, "child-a")
     freezer.move_to("2030-04-15 09:10:00+00:00")
-    assert entity.event.summary == "Daily focus"
+    assert entity.event.summary == "Example activity"
     assert entity.supported_features == 0
     assert entity.available
     freezer.move_to("2030-04-17 00:00:00+00:00")
     assert entity.event is None
+    assert client.async_source.call_count == 4
+
+
+@pytest.mark.parametrize(
+    "localization",
+    [
+        ("en", "Pedagogy", "Daily focus"),
+        ("nb", "Pedagogikk", "Dagens fokus"),
+    ],
+)
+async def test_pedagogy_has_its_own_all_day_calendar(
+    hass, entry, client, freezer, localization
+):
+    """Daily focus retains its text and UID without appearing in Activities."""
+    language, label, title = localization
+    hass.config.language = language
+    coordinator = make_coordinator(hass, entry, client)
+    coordinator.data = await coordinator.async_events(START, END)
+    coordinator.last_update_success = True
+    entity = DibberCalendar(coordinator, "child-a", "focus")
+    assert entity.name == f"Dibber Example {label}"
+    assert entity.unique_id == "account-a:child-a:focus"
+    assert entity.supported_features == 0
+    events = await entity.async_get_events(hass, START, END)
+    assert len(events) == 1
+    event = events[0]
+    assert event.summary == title
+    assert event.description == "Fictional focus."
+    assert event.uid == "focus:nursery-a:department-a:2030-04-15"
+    assert event.start == date(2030, 4, 15)
+    assert event.end == date(2030, 4, 16)
+    assert event not in coordinator.data["child-a", "activities"]
+    assert "PRIVATE_" not in repr(events)
+    freezer.move_to("2030-04-15 12:00:00+00:00")
+    assert entity.event == event
+    freezer.move_to(datetime(2030, 4, 16, tzinfo=dt_util.DEFAULT_TIME_ZONE))
+    assert entity.event is None
+    assert client.async_source.call_count == 4
+
+
+@pytest.mark.parametrize("bucket", ["pending", "accepted"])
+async def test_meetings_move_out_of_activities_and_keep_rsvp_scope(
+    hass, entry, client, bucket
+):
+    """Exact Meeting types share reads, deduplicate, and retain private routing."""
+    coordinator = make_coordinator(hass, entry, client)
+    invitation = source_payload("rsvp")[0]["pending"][0]
+    invitation["id"] = "personal-meeting"
+    invitation["activityType"] = "Meeting"
+    ordinary = [
+        activity(activity_id=kind, activityType=kind)
+        for kind in ("Meal", "Playtime", "Sleep", "Other", "FutureType", "meeting")
+    ]
+    department_meeting = activity(
+        activity_id="department-meeting", activityType="Meeting"
+    )
+    personal_copy = {
+        **invitation,
+        "rsvpResponse": {**invitation["rsvpResponse"], "location": None},
+    }
+    sources = {
+        "activities": [{"activities": [*ordinary, department_meeting, personal_copy]}],
+        "rsvp": [{"pending": [], "accepted": [], bucket: [invitation, invitation]}],
+    }
+    client.async_source.side_effect = lambda source, *_: sources.get(source, [])
+    coordinator.data = await coordinator.async_events(START, END)
+    coordinator.last_update_success = True
+    entity = DibberCalendar(coordinator, "child-a", "meetings")
+    assert entity.name == "Dibber Example Meetings"
+    assert entity.unique_id == "account-a:child-a:meetings"
+    assert entity.supported_features == 0
+    meetings = await entity.async_get_events(hass, START, END)
+    assert {event.uid for event in meetings} == {
+        "activity:nursery-a:department-meeting:2030-04-15",
+        "activity:nursery-a:personal-meeting:2030-04-15",
+    }
+    personal = next(event for event in meetings if event.location)
+    assert personal.location == "Example room"
+    assert personal.description == invitation["description"]
+    assert personal.start == START + timedelta(hours=9)
+    assert personal.end == START + timedelta(hours=9, minutes=30)
+    assert coordinator.data["child-a", "rsvp"] == [personal]
+    assert {event.uid for event in coordinator.data["child-b", "meetings"]} == {
+        "activity:nursery-a:department-meeting:2030-04-15"
+    }
+    assert coordinator.data["child-b", "rsvp"] == []
+    for child in ("child-a", "child-b"):
+        assert {event.uid for event in coordinator.data[child, "activities"]} == {
+            f"activity:nursery-a:{item['id']}:2030-04-15" for item in ordinary
+        }
+    assert "PRIVATE_" not in repr(coordinator._cache)
     assert client.async_source.call_count == 4
 
 

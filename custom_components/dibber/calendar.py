@@ -1,4 +1,4 @@
-"""Read-only activity, closure, and invitation calendars for each selected child."""
+"""Separate read-only Dibber calendars for each selected child."""
 
 import re
 from typing import TYPE_CHECKING
@@ -11,7 +11,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
 from .api import AccessDeniedError, AuthenticationError, DibberError
-from .const import CONF_ACCOUNT_ID, DOMAIN
+from .const import CALENDAR_TYPES, CONF_ACCOUNT_ID, DOMAIN
 from .coordinator import DibberConfigEntry, DibberCoordinator
 from .events import identity
 
@@ -34,7 +34,7 @@ async def async_setup_entry(
     entities = [
         DibberCalendar(coordinator, child, calendar_type)
         for child in coordinator.selected
-        for calendar_type in ("activities", "closures", "rsvp")
+        for calendar_type in CALENDAR_TYPES
     ]
     registry = er.async_get(hass)
     for entity in entities:
@@ -58,30 +58,22 @@ class DibberCalendar(CoordinatorEntity[DibberCoordinator], CalendarEntity):
         super().__init__(coordinator)
         self.child_id = child_id
         self._calendar_key = (child_id, calendar_type)
-        self._suffix = (
-            " Aktiviteter"
-            if coordinator.hass.config.language in ("nb", "no")
-            else " Activities"
+        english, norwegian, self._attr_icon = {
+            "activities": ("Activities", "Aktiviteter", "mdi:calendar"),
+            "closures": ("Closure days", "Stengedager", "mdi:calendar-remove"),
+            "rsvp": ("Invitations", "Invitasjoner", "mdi:calendar-account"),
+            "focus": ("Pedagogy", "Pedagogikk", "mdi:school"),
+            "meetings": ("Meetings", "Møter", "mdi:account-group"),
+        }[calendar_type]
+        label = (
+            norwegian if coordinator.hass.config.language in ("nb", "no") else english
         )
+        self._suffix = f" {label}"
         self._attr_unique_id = identity(
             coordinator.config_entry.data[CONF_ACCOUNT_ID], child_id
         )
-        if calendar_type == "closures":
-            self._attr_unique_id += ":closures"
-            self._attr_icon = "mdi:calendar-remove"
-            self._suffix = (
-                " Stengedager"
-                if coordinator.hass.config.language in ("nb", "no")
-                else " Closure days"
-            )
-        elif calendar_type == "rsvp":
-            self._attr_unique_id += ":rsvp"
-            self._attr_icon = "mdi:calendar-account"
-            self._suffix = (
-                " Invitasjoner"
-                if coordinator.hass.config.language in ("nb", "no")
-                else " Invitations"
-            )
+        if calendar_type != "activities":
+            self._attr_unique_id += f":{calendar_type}"
 
     @property
     def name(self) -> str:

@@ -22,6 +22,7 @@ class Occurrence:
     event: CalendarEvent
     day: date
     recipients: frozenset[str] | None = None
+    is_meeting: bool = False
 
 
 def identity(*parts: str) -> str:
@@ -101,6 +102,7 @@ def _activity(item: Any, nursery: str, *, rsvp: bool) -> Occurrence:
         ),
         day,
         recipients,
+        is_meeting=item.get("activityType") == "Meeting",
     )
 
 
