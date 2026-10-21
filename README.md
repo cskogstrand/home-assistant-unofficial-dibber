@@ -279,37 +279,40 @@ and [HA reauthentication](https://contributors.home-assistant.io/core/integratio
 ## Releases
 
 The version in `custom_components/dibber/manifest.json` is the source of truth.
-Use stable `MAJOR.MINOR.PATCH` versions and matching `vMAJOR.MINOR.PATCH` Git tags.
-The README version badge follows the manifest on `main`; the download badge counts
-release-asset downloads and becomes useful after the first published release.
+Use stable `MAJOR.MINOR.PATCH` versions. **Pushing or merging a version increase
+to `main` requests automatic publication.** Choose the version deliberately:
+patch for fixes, minor for features, and major for breaking changes.
 
-To prepare a release:
+To release:
 
-1. Update the manifest version and commit all changes for the release. The first
-   release can use the current version, `0.1.4`.
-2. Push the commit and its matching tag, for example:
+1. Increase the manifest version, for example from `0.1.4` to `0.1.5`, and commit
+   the changes. Push or merge that commit into `main`.
+2. The [Release workflow](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/release.yml)
+   compares the manifest before and after the whole push. An unchanged version
+   skips release jobs; malformed versions and decreases fail without publishing.
+3. Tests, lint, Hassfest, and HACS validation run against that exact commit.
+   When all pass, the workflow builds and verifies `dibber.zip`, creates the
+   matching tag (for example, `v0.1.5`), and publishes the release with generated
+   notes. The release stays a draft during upload so HACS receives a complete ZIP.
 
-   ```sh
-   git push origin main
-   git tag -a v0.1.4 -m "Dibber v0.1.4"
-   git push origin v0.1.4
-   ```
+Ordinary pushes continue to run CI. Other branches and manually pushed tags do
+not publish releases. No local deploy script, separate release branch, or personal
+access token is needed. Only the release job has permission to create tags and
+releases; the workflow never edits or commits the manifest for you.
 
-3. The [Release workflow](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/release.yml)
-   runs tests, lint, Hassfest, and HACS validation for the tag. It builds `dibber.zip`
-   from the committed integration directory, verifies its version and contents,
-   and creates a **draft** GitHub release with generated release notes.
-4. Review the notes and attached ZIP in
-   [GitHub Releases](https://github.com/cskogstrand/home-assistant-unofficial-dibber/releases),
-   then explicitly publish the draft. Only published releases are offered to HACS
-   users; pushing a tag alone is insufficient.
+If checks fail, fix the problem and increase the version again, or rerun the
+original workflow for a transient failure. An existing tag is never overwritten:
+if a run stops after tag creation or draft upload, inspect that tag and draft
+before completing publication manually or choosing a new version. Published
+tags and assets must not be replaced.
 
 The ZIP contains the integration files at its root, including translations and
 branding. HACS installs it using `zip_release` and `filename` in `hacs.json`.
 The default branch is hidden in HACS because it has no release ZIP; install
 development snapshots manually from source.
 Untracked local files, Home Assistant configuration, tests, and development tools
-are excluded. No workflow commits version changes or publishes a release on its own.
+are excluded. The README version badge follows the manifest on `main`; the
+download badge counts release-asset downloads.
 HACS default-store inclusion remains a separate process.
 
 ## Controlled live verification — explicit approval required

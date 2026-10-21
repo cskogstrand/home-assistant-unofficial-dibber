@@ -2,8 +2,9 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    paths:
+      - custom_components/dibber/manifest.json
 
 permissions:
   contents: read
@@ -13,17 +14,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  version:
+    name: Detect version bump
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: python3 scripts/release_version.py custom_components/dibber/manifest.json
+
   test:
+    needs: version
+    if: needs.version.outputs.tag != ''
     uses: ./.github/workflows/test.yml
 
   lint:
+    needs: version
+    if: needs.version.outputs.tag != ''
     uses: ./.github/workflows/lint.yml
 
   validate:
+    needs: version
+    if: needs.version.outputs.tag != ''
     uses: ./.github/workflows/validate.yml
 
   release:
-    needs: [test, lint, validate]
+    needs: [version, test, lint, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,7 +56,7 @@ jobs:
 
       - name: Build and verify HACS archive
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
         run: |
           git archive --format=zip --output=dibber.zip HEAD:custom_components/dibber
           python3 - <<'PY'
@@ -63,11 +85,15 @@ jobs:
               assert required <= set(archive.namelist())
           PY
 
-      - name: Prepare draft release
+      - name: Tag and publish release
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
         run: |
+          gh api --method POST "repos/$GH_REPO/git/refs" --silent \
+            -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA"
           gh release create "$RELEASE_TAG" dibber.zip \
-            --verify-tag --draft --generate-notes --title "Dibber $RELEASE_TAG"
+            --verify-tag --target "$GITHUB_SHA" --draft --generate-notes --title "Dibber $RELEASE_TAG"
+          gh release edit "$RELEASE_TAG" --draft=false
