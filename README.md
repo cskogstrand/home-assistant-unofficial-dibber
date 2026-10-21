@@ -275,13 +275,13 @@ release-asset downloads and becomes useful after the first published release.
 To prepare a release:
 
 1. Update the manifest version and commit all changes for the release. The first
-   release can use the current version, `0.1.3`.
+   release can use the current version, `0.1.4`.
 2. Push the commit and its matching tag, for example:
 
    ```sh
    git push origin main
-   git tag -a v0.1.3 -m "Dibber v0.1.3"
-   git push origin v0.1.3
+   git tag -a v0.1.4 -m "Dibber v0.1.4"
+   git push origin v0.1.4
    ```
 
 3. The [Release workflow](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/release.yml)
