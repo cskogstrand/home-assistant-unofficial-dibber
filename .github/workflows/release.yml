@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  validate:
+    uses: ./.github/workflows/validate.yml
+
+  release:
+    needs: [test, lint, validate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build and verify HACS archive
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          git archive --format=zip --output=dibber.zip HEAD:custom_components/dibber
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import zipfile
+
+          tag = os.environ["RELEASE_TAG"]
+          if not re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag):
+              raise SystemExit("Release tags must use vMAJOR.MINOR.PATCH, for example v0.1.3")
+          with zipfile.ZipFile("dibber.zip") as archive:
+              if archive.testzip() is not None:
+                  raise SystemExit("Release archive is corrupt")
+              manifest = json.loads(archive.read("manifest.json"))
+              if tag != f"v{manifest['version']}":
+                  raise SystemExit("Release tag must match the committed manifest.json version")
+              required = {
+                  "__init__.py",
+                  "strings.json",
+                  "translations/en.json",
+                  "translations/nb.json",
+                  "brand/icon.png",
+              }
+              assert manifest["domain"] == "dibber"
+              assert required <= set(archive.namelist())
+          PY
+
+      - name: Prepare draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dibber.zip \
+            --verify-tag --draft --generate-notes --title "Dibber $RELEASE_TAG"

@@ -1,5 +1,8 @@
 {
   "name": "Dibber",
+  "zip_release": true,
+  "filename": "dibber.zip",
+  "hide_default_branch": true,
   "homeassistant": "2026.10.2",
   "hacs": "2.0.5",
   "render_readme": true

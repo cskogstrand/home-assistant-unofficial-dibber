@@ -1,5 +1,15 @@
 # Dibber calendars for Home Assistant
 
+[![Version](https://img.shields.io/github/manifest-json/v/cskogstrand/home-assistant-unofficial-dibber?filename=custom_components%2Fdibber%2Fmanifest.json)](https://github.com/cskogstrand/home-assistant-unofficial-dibber/releases)
+[![Downloads](https://img.shields.io/github/downloads/cskogstrand/home-assistant-unofficial-dibber/total)](https://github.com/cskogstrand/home-assistant-unofficial-dibber/releases)
+[![HACS custom repository](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/cskogstrand/home-assistant-unofficial-dibber#installation)
+[![Home Assistant minimum version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcskogstrand%2Fhome-assistant-unofficial-dibber%2Fmain%2Fhacs.json&query=%24.homeassistant&prefix=%E2%89%A5%20&label=Home%20Assistant&color=18bcf2)](https://github.com/cskogstrand/home-assistant-unofficial-dibber/blob/main/hacs.json)
+
+[![Tests](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/test.yml)
+[![Lint](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/lint.yml)
+[![HACS and Hassfest validation](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/validate.yml)
+[![License](https://img.shields.io/github/license/cskogstrand/home-assistant-unofficial-dibber)](LICENSE)
+
 An **unofficial**, read-only integration for caregiver accounts, installable as a
 HACS custom repository. Each selected child gets ordinary Home Assistant calendars:
 
@@ -19,6 +29,13 @@ Month-long queries were verified separately by the user who supplied the API bri
 
 ## Installation
 
+[![Open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=cskogstrand&repository=home-assistant-unofficial-dibber&category=integration)
+
+HACS downloads require a published release. Before the first release, use the
+manual source installation below.
+
+With HACS installed, use the button above or add the repository manually:
+
 1. In HACS, open **Custom repositories** and add
    `https://github.com/cskogstrand/home-assistant-unofficial-dibber` as **Integration**.
 2. Download Dibber and restart Home Assistant.
@@ -27,10 +44,11 @@ Month-long queries were verified separately by the user who supplied the API bri
    verification step.** Enter your Dibber access code on the next screen.
 5. Select the children whose calendars you want.
 
-HACS installation becomes available once this implementation is pushed to the
-repository. Implementation does not publish it or create a release. For local
-installation, copy `custom_components/dibber` into
-`<HA config>/custom_components/dibber` and restart HA.
+For manual installation, download `dibber.zip` from the
+[latest release](https://github.com/cskogstrand/home-assistant-unofficial-dibber/releases/latest)
+and extract its contents into `<HA config>/custom_components/dibber`, then restart
+Home Assistant. For local development or before the first release, copy the
+repository's `custom_components/dibber` directory to the same location instead.
 
 Only provisioned caregiver `DibberMFA` sign-in is supported; passkeys and educator
 accounts are unsupported. Code validity depends on Dibber and your account; the
@@ -246,6 +264,42 @@ HACS default-store inclusion remains a separate publishing task.
 See [DIBBER_HACS_PROMPT.md](DIBBER_HACS_PROMPT.md) for the evidence and scope,
 [HA's calendar contract](https://contributors.home-assistant.io/core/entities/calendar/),
 and [HA reauthentication](https://contributors.home-assistant.io/core/integrations/reauth-reconfigure/).
+
+## Releases
+
+The version in `custom_components/dibber/manifest.json` is the source of truth.
+Use stable `MAJOR.MINOR.PATCH` versions and matching `vMAJOR.MINOR.PATCH` Git tags.
+The README version badge follows the manifest on `main`; the download badge counts
+release-asset downloads and becomes useful after the first published release.
+
+To prepare a release:
+
+1. Update the manifest version and commit all changes for the release. The first
+   release can use the current version, `0.1.3`.
+2. Push the commit and its matching tag, for example:
+
+   ```sh
+   git push origin main
+   git tag -a v0.1.3 -m "Dibber v0.1.3"
+   git push origin v0.1.3
+   ```
+
+3. The [Release workflow](https://github.com/cskogstrand/home-assistant-unofficial-dibber/actions/workflows/release.yml)
+   runs tests, lint, Hassfest, and HACS validation for the tag. It builds `dibber.zip`
+   from the committed integration directory, verifies its version and contents,
+   and creates a **draft** GitHub release with generated release notes.
+4. Review the notes and attached ZIP in
+   [GitHub Releases](https://github.com/cskogstrand/home-assistant-unofficial-dibber/releases),
+   then explicitly publish the draft. Only published releases are offered to HACS
+   users; pushing a tag alone is insufficient.
+
+The ZIP contains the integration files at its root, including translations and
+branding. HACS installs it using `zip_release` and `filename` in `hacs.json`.
+The default branch is hidden in HACS because it has no release ZIP; install
+development snapshots manually from source.
+Untracked local files, Home Assistant configuration, tests, and development tools
+are excluded. No workflow commits version changes or publishes a release on its own.
+HACS default-store inclusion remains a separate process.
 
 ## Controlled live verification — explicit approval required
 
