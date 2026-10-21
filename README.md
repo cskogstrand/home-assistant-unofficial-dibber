@@ -32,3 +32,21 @@ Change children under **Configure**. If sign-in breaks, use **Reconfigure**.
 [Report a bug](https://github.com/cskogstrand/home-assistant-unofficial-dibber/issues) — keep credentials and children's data out of reports.
 
 Not affiliated with Dibber. Dibber owns its branding; it is excluded from this project's [MIT license](LICENSE).
+
+## Deploying from main
+
+After `./scripts/setup`, commit your code and changelog changes, then run
+`./deploy.sh` from a clean `main` checkout. The script operates only on this
+repository and patch-bumps `custom_components/dibber/manifest.json` without reformatting it. It fetches
+`origin/main` and refuses behind or diverged branches. Committed local changes
+ahead of `origin/main` are included in the push.
+
+It runs `./scripts/lint` and `./scripts/test` before committing only the manifest and pushing `main`.
+**If any check fails, the original version is restored and nothing is committed
+or pushed.** Concurrent edits are preserved. If a commit or push fails after
+testing, inspect the local release commit and finish the push manually; do not
+run the script again and bump twice. It never force-pushes or resets your work.
+
+Automatic patch bumps require stable `MAJOR.MINOR.PATCH` versions. Use the manual
+release process for minor, major or prerelease changes. GitHub's release workflow
+still performs Hassfest and HACS validation before publishing.
