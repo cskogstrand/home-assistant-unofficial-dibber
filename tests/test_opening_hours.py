@@ -162,35 +162,33 @@ def test_weekly_hours_expand_through_dst_without_guessing_invalid_times(caplog):
     assert "skipped 1 invalid local dates" in caplog.text
 
 
+@patch("custom_components.dibber.coordinator.time")
 async def test_daily_refresh_preserves_failed_cache_and_clears_successful_empty(
-    hass, entry, client
+    clock, hass, entry, client
 ):
     """Hours refresh once daily; failed responses never become an empty schedule."""
+    clock.monotonic.return_value = 0.0
     coordinator = make_coordinator(hass, entry, client)
     client.async_opening_hours.return_value = opening_hours()
     first = (await coordinator.async_events(START, END))["child-a", "opening_hours"]
-    fetched_at = coordinator._opening_hours["nursery-a"][0]
     client.async_opening_hours.return_value = opening_hours(opens="09:00")
-    with patch(
-        "custom_components.dibber.coordinator.time.monotonic",
-        return_value=fetched_at + 86400,
-    ):
-        updated = (await coordinator.async_events(START, END))[
-            "child-a", "opening_hours"
-        ]
+    clock.monotonic.return_value = 86399.0
+    assert (await coordinator.async_events(START, END))[
+        "child-a", "opening_hours"
+    ] == first
+    client.async_opening_hours.assert_awaited_once_with("nursery-a")
+    clock.monotonic.return_value = 86400.0
+    updated = (await coordinator.async_events(START, END))["child-a", "opening_hours"]
     assert [event.uid for event in updated] == [event.uid for event in first]
     assert all(event.start.hour == 9 for event in updated)
     previous = dict(coordinator._opening_hours)
-    with patch(
-        "custom_components.dibber.coordinator.time.monotonic",
-        return_value=fetched_at + 172800,
-    ):
-        client.async_opening_hours.side_effect = CommunicationError("cannot_connect")
-        with pytest.raises(CommunicationError, match="cannot_connect"):
-            await coordinator.async_events(START, END)
-        assert dict(coordinator._opening_hours) == previous
-        client.async_opening_hours.side_effect = None
-        client.async_opening_hours.return_value = []
-        result = await coordinator.async_events(START, END)
+    clock.monotonic.return_value = 172800.0
+    client.async_opening_hours.side_effect = CommunicationError("cannot_connect")
+    with pytest.raises(CommunicationError, match="cannot_connect"):
+        await coordinator.async_events(START, END)
+    assert dict(coordinator._opening_hours) == previous
+    client.async_opening_hours.side_effect = None
+    client.async_opening_hours.return_value = []
+    result = await coordinator.async_events(START, END)
     assert result["child-a", "opening_hours"] == []
     assert result["child-b", "opening_hours"] == []

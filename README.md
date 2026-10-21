@@ -50,6 +50,12 @@ and extract its contents into `<HA config>/custom_components/dibber`, then resta
 Home Assistant. For local development or before the first release, copy the
 repository's `custom_components/dibber` directory to the same location instead.
 
+To pick up a published release, open Dibber in HACS and select **⋮ → Update
+information**, then update or **Redownload** and select the release version.
+Restart Home Assistant after installation. HACS shows the README for the installed
+revision, so an older commit installation also shows the older README. Draft
+GitHub releases and tags without published releases do not appear as release choices.
+
 Only provisioned caregiver `DibberMFA` sign-in is supported; passkeys and educator
 accounts are unsupported. Code validity depends on Dibber and your account; the
 integration assumes neither single-use nor permanent validity. It creates its
@@ -67,6 +73,11 @@ The integration bundles Dibber's official icon and wordmark from
 Home Assistant loads these automatically after installation and restart using its
 [local brand image support](https://contributors.home-assistant.io/core/integrations/brands/).
 If an old placeholder remains, refresh the browser or companion app.
+
+The HACS repository-list icon is separate. HACS frontends that load icons from
+`brands.home-assistant.io` do not use this integration's local `brand/` directory
+and can still show a placeholder. The bundled files provide Home Assistant's
+integration branding; they do not register an icon in HACS's remote catalog.
 
 Sources: [icon](https://static.wixstatic.com/media/fc9d19_6f99730adbc14c46b6cd682d986a99ec~mv2.png)
 and [wordmark](https://static.wixstatic.com/media/fc9d19_2c67357a7d7b4471a016afc6fd09885e~mv2.png),
