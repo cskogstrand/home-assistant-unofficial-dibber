@@ -35,17 +35,29 @@ Not affiliated with Dibber. Dibber owns its branding; it is excluded from this p
 
 ## Deploying from main
 
-After `./scripts/setup`, commit your code and changelog changes, then run
+After `./scripts/setup`, commit your code changes, then run
 `./deploy.sh` from a clean `main` checkout. The script operates only on this
 repository and patch-bumps `custom_components/dibber/manifest.json` without reformatting it. It fetches
 `origin/main` and refuses behind or diverged branches. Committed local changes
 ahead of `origin/main` are included in the push.
 
-It runs `./scripts/lint` and `./scripts/test` before committing only the manifest and pushing `main`.
-**If any check fails, the original version is restored and nothing is committed
-or pushed.** Concurrent edits are preserved. If a commit or push fails after
+It runs `./scripts/lint` and `./scripts/test` before committing the manifest and `CHANGELOG.md` together and pushing `main`.
+**If any check fails, the original version and changelog are restored and nothing
+is committed or pushed.** Concurrent edits are preserved. If a commit or push fails after
 testing, inspect the local release commit and finish the push manually; do not
 run the script again and bump twice. It never force-pushes or resets your work.
+
+The changelog lists commit subjects since the previous recorded release, excluding
+merge commits and automated version-bump commits. Historical entries are kept,
+and a hidden `release-source` marker records each boundary; preserve these markers
+when editing notes. Missing or invalid markers and duplicate version entries stop
+the deployment before tests or a push. The current published release is included
+as the initial changelog boundary.
+
+GitHub publishes the matching version entry as release notes after CI passes.
+Manual version bumps without an entry retain GitHub's generated-notes fallback;
+when releasing manually, add a `## VERSION` section with a `release-source` marker
+for the source commit so the next `./deploy.sh` can continue from it.
 
 Automatic patch bumps require stable `MAJOR.MINOR.PATCH` versions. Use the manual
 release process for minor, major or prerelease changes. GitHub's release workflow

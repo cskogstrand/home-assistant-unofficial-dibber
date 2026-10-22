@@ -92,8 +92,17 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.version.outputs.tag }}
         run: |
+          notes=(--generate-notes)
+          if [[ -f CHANGELOG.md ]] && awk -v heading="## ${RELEASE_TAG#v}" '
+            $0 == heading { found = 1; next }
+            found && /^## / { exit }
+            found && !/^<!-- release-source:/ { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"; then
+            notes=(--notes-file "$RUNNER_TEMP/release-notes.md")
+          fi
           gh api --method POST "repos/$GH_REPO/git/refs" --silent \
             -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA"
           gh release create "$RELEASE_TAG" dibber.zip \
-            --verify-tag --target "$GITHUB_SHA" --draft --generate-notes --title "Dibber $RELEASE_TAG"
+            --verify-tag --target "$GITHUB_SHA" --draft "${notes[@]}" --title "Dibber $RELEASE_TAG"
           gh release edit "$RELEASE_TAG" --draft=false

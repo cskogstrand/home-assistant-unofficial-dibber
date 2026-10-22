@@ -59,6 +59,9 @@ def deployment(tmp_path):
             "    output.write(call + '\\n')\n"
             "if os.environ.get('DEPLOY_TEST_DIRTY') == call:\n"
             "    pathlib.Path('unrelated.txt').write_text('concurrent work\\n')\n"
+            "if os.environ.get('DEPLOY_TEST_EDIT') and call == 'scripts/test':\n"
+            "    path = pathlib.Path(os.environ['DEPLOY_TEST_EDIT'])\n"
+            "    path.write_text(path.read_text() + 'Concurrent edit\\n')\n"
             "if os.environ.get('DEPLOY_TEST_FAIL') == call: sys.exit(1)\n"
         )
 
@@ -75,6 +78,14 @@ def deployment(tmp_path):
     git("init", "--initial-branch=main")
     git("add", ".")
     git("commit", "-m", "test: initial files")
+    base = git("rev-parse", "HEAD")
+    changelog = (
+        "# Changelog\n\n## 1.2.9\n\n"
+        f"<!-- release-source: {base} -->\n\n- Earlier changes.\n"
+    )
+    write(repo / "CHANGELOG.md", changelog)
+    git("add", "CHANGELOG.md")
+    git("commit", "-m", "chore: release 1.2.9")
     git("remote", "add", "origin", str(remote))
     git("push", "-u", "origin", "main")
     write(remote / "hooks/pre-receive", recorder("push"), True)
@@ -97,39 +108,72 @@ def deployment(tmp_path):
         git=git,
         run=run,
         head=git("rev-parse", "HEAD"),
+        changelog=changelog,
     )
 
 
 def assert_unchanged(deployment):
-    """Failures before committing restore the exact original manifest."""
+    """Failures before committing restore the exact original release files."""
     assert (deployment.repo / MANIFEST).read_text() == ORIGINAL
+    assert (deployment.repo / "CHANGELOG.md").read_text() == deployment.changelog
     assert deployment.git("rev-parse", "HEAD") == deployment.head
     assert deployment.git("rev-parse", "main", cwd=deployment.remote) == deployment.head
     assert "push" not in deployment.log.read_text().splitlines()
 
 
-def test_deploy_checks_before_pushing_only_manifest(deployment):
-    """Patch bump without reformatting or requiring another checkout."""
+def test_deploy_checks_before_pushing_manifest_and_changelog(deployment):
+    """Publish notes for actual changes, preserving history and version formatting."""
+    deployment.git("checkout", "-b", "feature")
+    (deployment.repo / "state.txt").write_text("state\n")
+    deployment.git("add", "state.txt")
+    deployment.git("commit", "-m", "fix: show [state] <safely>")
+    deployment.git("checkout", "main")
+    (deployment.repo / "controls.txt").write_text("controls\n")
+    deployment.git("add", "controls.txt")
+    deployment.git("commit", "-m", "feat: improve controls")
+    deployment.git("merge", "--no-ff", "feature", "-m", "Merge feature")
+    source = deployment.git("rev-parse", "HEAD")
     result = deployment.run()
     assert result.returncode == 0, result.stdout + result.stderr
     assert (deployment.repo / MANIFEST).read_text() == ORIGINAL.replace(
         "1.2.9", "1.2.10"
     )
     assert deployment.log.read_text().splitlines() == [*CHECKS, "push"]
-    assert deployment.git("diff", "--name-only", "HEAD^", "HEAD") == MANIFEST
+    assert deployment.git("diff", "--name-only", "HEAD^", "HEAD") == (
+        f"CHANGELOG.md\n{MANIFEST}"
+    )
+    changelog = (deployment.repo / "CHANGELOG.md").read_text()
+    assert changelog.startswith(
+        f"# Changelog\n\n## 1.2.10\n\n<!-- release-source: {source} -->\n"
+    )
+    assert "- feat: improve controls\n" in changelog
+    assert r"- fix: show \[state\] \<safely\>" in changelog
+    assert "Merge feature" not in changelog
+    assert "chore: release" not in changelog
+    assert "test: initial files" not in changelog
+    assert changelog.endswith(deployment.changelog.removeprefix("# Changelog\n\n"))
     assert deployment.git("status", "--porcelain") == ""
     assert deployment.git("rev-parse", "HEAD") == deployment.git(
         "rev-parse", "main", cwd=deployment.remote
     )
 
+    result = deployment.run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    following = (deployment.repo / "CHANGELOG.md").read_text()
+    new_entry = following.split("## 1.2.10\n")[0]
+    assert "## 1.2.11\n" in new_entry
+    assert "- No changes beyond release metadata." in new_entry
+    assert "feat: improve controls" not in new_entry
+    assert following.endswith(changelog.removeprefix("# Changelog\n\n"))
+
 
 @pytest.mark.parametrize("failed_check", CHECKS)
-def test_failed_check_restores_version(deployment, failed_check):
-    """Every failed local check must revert the bump without committing or pushing."""
+def test_failed_check_restores_version_and_changelog(deployment, failed_check):
+    """Failed checks restore both files without committing or pushing."""
     deployment.env["DEPLOY_TEST_FAIL"] = failed_check
     result = deployment.run()
     assert result.returncode != 0
-    assert "Version restored" in result.stderr
+    assert "Version and changelog restored" in result.stderr
     assert_unchanged(deployment)
 
 
@@ -169,6 +213,49 @@ def test_concurrent_edits_are_preserved(deployment):
     assert (deployment.repo / "unrelated.txt").read_text() == "concurrent work\n"
 
 
+@pytest.mark.parametrize("edited_file", [MANIFEST, "CHANGELOG.md"])
+def test_concurrent_release_edit_preserves_edit_and_restores_other_file(
+    deployment, edited_file
+):
+    """Rollback each generated file without overwriting someone's concurrent work."""
+    deployment.env["DEPLOY_TEST_EDIT"] = edited_file
+    result = deployment.run()
+    assert result.returncode != 0
+    assert "concurrent edits left untouched" in result.stderr
+    assert (deployment.repo / edited_file).read_text().endswith("Concurrent edit\n")
+    if edited_file == MANIFEST:
+        assert (deployment.repo / "CHANGELOG.md").read_text() == deployment.changelog
+    else:
+        assert (deployment.repo / MANIFEST).read_text() == ORIGINAL
+    assert deployment.git("rev-parse", "HEAD") == deployment.head
+    assert deployment.git("rev-parse", "main", cwd=deployment.remote) == deployment.head
+    assert "push" not in deployment.log.read_text().splitlines()
+
+
+@pytest.mark.parametrize("invalid", ["missing marker", "unknown commit", "duplicate"])
+def test_invalid_changelog_stops_before_testing(deployment, invalid):
+    """Never invent a release boundary or overwrite existing release notes."""
+    changelog = deployment.changelog
+    if invalid == "missing marker":
+        changelog = "# Changelog\n\n## 1.2.9\n\n- Earlier changes.\n"
+    elif invalid == "unknown commit":
+        base = deployment.git("rev-parse", "HEAD^")
+        changelog = changelog.replace(base, "a" * 40)
+    else:
+        changelog = changelog.replace(
+            "# Changelog\n\n", "# Changelog\n\n## 1.2.10\n\n- Handwritten notes.\n\n"
+        )
+    (deployment.repo / "CHANGELOG.md").write_text(changelog)
+    deployment.git("add", "CHANGELOG.md")
+    deployment.git("commit", "-m", "test: invalid changelog")
+    head = deployment.git("rev-parse", "HEAD")
+    assert deployment.run().returncode != 0
+    assert deployment.log.read_text() == ""
+    assert deployment.git("rev-parse", "HEAD") == head
+    assert (deployment.repo / MANIFEST).read_text() == ORIGINAL
+    assert (deployment.repo / "CHANGELOG.md").read_text() == changelog
+
+
 def test_failed_push_keeps_release_commit(deployment):
     """Leave the tested commit available for a manual push retry."""
     deployment.env["DEPLOY_TEST_FAIL"] = "push"
@@ -180,3 +267,5 @@ def test_failed_push_keeps_release_commit(deployment):
     assert (deployment.repo / MANIFEST).read_text() == ORIGINAL.replace(
         "1.2.9", "1.2.10"
     )
+    assert "## 1.2.10\n" in (deployment.repo / "CHANGELOG.md").read_text()
+    assert deployment.git("status", "--porcelain") == ""

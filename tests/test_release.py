@@ -82,9 +82,10 @@ def test_version_bump_before_last_commit_in_push(tmp_path):
     assert output.read_text() == "tag=v0.1.5\n"
 
 
+@pytest.mark.parametrize("notes_version", [None, "0.1.4", "0.1.5"])
 @pytest.mark.parametrize(("fail_at", "expected_calls"), [(0, 3), (1, 1), (2, 2)])
 def test_publish_stops_on_existing_tag_or_failed_upload(
-    tmp_path, fail_at, expected_calls
+    tmp_path, fail_at, expected_calls, notes_version
 ):
     """Run the workflow's actual publish commands with a fake GitHub CLI."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
@@ -104,6 +105,12 @@ def test_publish_stops_on_existing_tag_or_failed_upload(
     )
     fake_gh.chmod(0o755)
     log = tmp_path / "calls.jsonl"
+    if notes_version:
+        (tmp_path / "CHANGELOG.md").write_text(
+            f"# Changelog\n\n## {notes_version}\n\n"
+            f"<!-- release-source: {'a' * 40} -->\n\n"
+            "- New feature.\n\n## 0.1.3\n\n- Earlier changes.\n"
+        )
     result = subprocess.run(
         ["bash", "-e", "-o", "pipefail", "-c", publish["run"]],
         cwd=tmp_path,
@@ -138,6 +145,15 @@ def test_publish_stops_on_existing_tag_or_failed_upload(
         assert calls[1][:3] == ["release", "create", "v0.1.5"]
         assert "--draft" in calls[1]
         assert "--verify-tag" in calls[1]
+        if notes_version == "0.1.5":
+            assert "--generate-notes" not in calls[1]
+            notes = Path(calls[1][calls[1].index("--notes-file") + 1]).read_text()
+            assert "- New feature." in notes
+            assert "Earlier changes" not in notes
+            assert "release-source" not in notes
+        else:
+            assert "--generate-notes" in calls[1]
+            assert "--notes-file" not in calls[1]
         assert calls[1][calls[1].index("--target") + 1] == "a" * 40
     if fail_at == 0:
         assert calls[2] == ["release", "edit", "v0.1.5", "--draft=false"]
